@@ -2,13 +2,14 @@ import SwiftUI
 
 // MARK: - Model
 
-struct ScheduleBlock: Identifiable, Equatable,Codable {
+struct ScheduleBlock: Identifiable, Equatable, Codable {
     let id: UUID
     var day: Date
     var activity: String
     var startTime: Date
     var durationMinutes: Int
     var notes: String
+    var isDone: Bool
 
     init(
         id: UUID = UUID(),
@@ -16,7 +17,8 @@ struct ScheduleBlock: Identifiable, Equatable,Codable {
         activity: String,
         startTime: Date,
         durationMinutes: Int,
-        notes: String = ""
+        notes: String = "",
+        isDone: Bool = false
     ) {
         self.id = id
         self.day = Calendar.current.startOfDay(for: day)
@@ -24,6 +26,23 @@ struct ScheduleBlock: Identifiable, Equatable,Codable {
         self.startTime = startTime
         self.durationMinutes = durationMinutes
         self.notes = notes
+        self.isDone = isDone
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id, day, activity, startTime, durationMinutes, notes, isDone
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(UUID.self, forKey: .id)
+        day = try c.decode(Date.self, forKey: .day)
+        activity = try c.decode(String.self, forKey: .activity)
+        startTime = try c.decode(Date.self, forKey: .startTime)
+        durationMinutes = try c.decode(Int.self, forKey: .durationMinutes)
+        notes = (try? c.decode(String.self, forKey: .notes)) ?? ""
+        isDone = (try? c.decode(Bool.self, forKey: .isDone)) ?? false
+        day = Calendar.current.startOfDay(for: day)
     }
 }
 
@@ -41,27 +60,28 @@ enum DailyTheme {
 // MARK: - ContentView
 
 struct ContentView: View {
-    @State private var blocks: [ScheduleBlock] = loadBlocks()
+    @State private var blocks: [ScheduleBlock] = []
+    @State private var didLoadBlocks = false
     @State private var showAdd = false
     @State private var editingBlock: ScheduleBlock?
-    @State private var selectedDate: Date = Date()
+    @State private var selectedDate = Date()
     @State private var showCalendar = false
-    @State private var swipeDirection: Int = 0
+    @State private var swipeDirection = 0
 
     private var selectedDayStart: Date {
         Calendar.current.startOfDay(for: selectedDate)
     }
 
     private var todaysBlocks: [ScheduleBlock] {
-        blocks
-            .filter { $0.day == selectedDayStart }
-            .sorted { $0.startTime < $1.startTime }
+        blocks.filter { $0.day == selectedDayStart }
     }
 
     var body: some View {
         NavigationStack {
             VStack(alignment: .leading) {
                 GreetingBoxView()
+                    .padding(.horizontal, 18)
+                    .padding(.top, 6)
 
                 Text(shortDate(selectedDate))
                     .font(.system(size: 34, weight: .bold, design: .rounded))
@@ -84,16 +104,21 @@ struct ContentView: View {
                             ForEach(todaysBlocks) { block in
                                 blockRow(block)
                                     .contentShape(Rectangle())
-                                    .onTapGesture {
-                                        editingBlock = block
-                                    }
+                                    .onTapGesture { editingBlock = block }
                                     .swipeActions(edge: .trailing) {
-                                        editAction(block)
-                                        deleteAction(block)
+                                        Button { editingBlock = block } label: {
+                                            Label("Edit", systemImage: "pencil")
+                                        }
+                                        Button(role: .destructive) { delete(block) } label: {
+                                            Label("Delete", systemImage: "trash")
+                                        }
                                     }
                                     .listRowSeparator(.hidden)
                                     .listRowBackground(Color.clear)
                             }
+                            // NOTE: List reordering only works in Edit mode.
+                            // Keeping the handler here so you can re-enable later if you want.
+                            .onMove(perform: moveTodayBlocks)
                         }
                     }
                 }
@@ -132,14 +157,45 @@ struct ContentView: View {
                     }
             )
             .toolbar {
-                titleToolbar
-                calendarToolbar
-                addToolbar
+                ToolbarItem(placement: .principal) {
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            selectedDate = Date()
+                        }
+                    } label: {
+                        Text(Calendar.current.isDateInToday(selectedDate) ? "Today" : shortDate(selectedDate))
+                            .font(.system(.headline, design: .rounded))
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
+                            .background(
+                                Capsule().fill(DailyTheme.babyPink.opacity(0.22))
+                            )
+                    }
+                    .buttonStyle(.plain)
+                }
+
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button { showCalendar = true } label: {
+                        Image(systemName: "calendar")
+                            .font(.system(.body, design: .rounded))
+                            .padding(8)
+                            .background(Circle().fill(DailyTheme.skyBlue.opacity(0.22)))
+                    }
+                    .buttonStyle(.plain)
+                }
+
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button { showAdd = true } label: {
+                        Image(systemName: "plus")
+                            .font(.system(.body, design: .rounded))
+                            .padding(8)
+                            .background(Circle().fill(DailyTheme.babyPink.opacity(0.22)))
+                    }
+                    .buttonStyle(.plain)
+                }
             }
             .sheet(isPresented: $showAdd) {
-                AddBlockView(day: selectedDate) { newBlock in
-                    blocks.append(newBlock)
-                }
+                AddBlockView(day: selectedDate) { blocks.append($0) }
             }
             .sheet(item: $editingBlock) { block in
                 EditBlockView(
@@ -163,78 +219,14 @@ struct ContentView: View {
                     .presentationDragIndicator(.visible)
             }
         }
+        .onAppear {
+            guard !didLoadBlocks else { return }
+            blocks = loadBlocks()
+            didLoadBlocks = true
+        }
         .onChange(of: blocks) { _, newValue in
-                    saveBlocks(newValue)
-                }
-    }
-
-    // MARK: - Toolbar
-
-    private var titleToolbar: ToolbarItem<Void, some View> {
-        ToolbarItem(placement: .principal) {
-            Button {
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    selectedDate = Date()
-                }
-            } label: {
-                Text(Calendar.current.isDateInToday(selectedDate) ? "Today" : shortDate(selectedDate))
-                    .font(.system(.headline, design: .rounded))
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .background(
-                        Capsule()
-                            .fill(DailyTheme.babyPink.opacity(0.22))
-                    )
-            }
-            .buttonStyle(.plain)
-        }
-    }
-
-    private var calendarToolbar: ToolbarItem<Void, some View> {
-        ToolbarItem(placement: .topBarTrailing) {
-            Button {
-                showCalendar = true
-            } label: {
-                Image(systemName: "calendar")
-                    .font(.system(.body, design: .rounded))
-                    .padding(8)
-                    .background(Circle().fill(DailyTheme.skyBlue.opacity(0.22)))
-            }
-            .buttonStyle(.plain)
-        }
-    }
-
-    private var addToolbar: ToolbarItem<Void, some View> {
-        ToolbarItem(placement: .topBarTrailing) {
-            Button {
-                showAdd = true
-            } label: {
-                Image(systemName: "plus")
-                    .font(.system(.body, design: .rounded))
-                    .padding(8)
-                    .background(Circle().fill(DailyTheme.babyPink.opacity(0.22)))
-            }
-            .buttonStyle(.plain)
-        }
-    }
-
-    // MARK: - GreetingBox
-
-    struct GreetingBoxView: View {
-        var body: some View {
-            HStack {
-                Text(greetingText())
-                    .font(.system(.headline, design: .rounded))
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 8)
-                    .background(
-                        Capsule()
-                            .fill(DailyTheme.babyPink.opacity(0.25))
-                    )
-                Spacer()
-            }
-            .padding(.horizontal, 18)
-            .padding(.top, 6)
+            guard didLoadBlocks else { return }
+            saveBlocks(newValue)
         }
     }
 
@@ -254,6 +246,13 @@ struct ContentView: View {
 
     private func blockRow(_ block: ScheduleBlock) -> some View {
         HStack(spacing: 12) {
+            Button { toggleDone(block) } label: {
+                Image(systemName: block.isDone ? "checkmark.circle.fill" : "circle")
+                    .font(.system(size: 20, weight: .semibold, design: .rounded))
+                    .foregroundStyle(block.isDone ? DailyTheme.skyBlue : .secondary)
+            }
+            .buttonStyle(.plain)
+
             Text(timeString(block.startTime))
                 .font(.system(.body, design: .monospaced))
                 .foregroundStyle(.secondary)
@@ -262,6 +261,8 @@ struct ContentView: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(block.activity)
                     .font(.system(.headline, design: .rounded))
+                    .strikethrough(block.isDone, color: .secondary)
+                    .foregroundStyle(block.isDone ? .secondary : .primary)
 
                 Text("\(block.durationMinutes) min")
                     .font(.system(.subheadline, design: .rounded))
@@ -277,7 +278,7 @@ struct ContentView: View {
         .padding(.horizontal, 14)
         .background(
             RoundedRectangle(cornerRadius: 20)
-                .fill(DailyTheme.cream.opacity(0.92))
+                .fill(Color.white.opacity(0.78))
         )
         .overlay(
             RoundedRectangle(cornerRadius: 20)
@@ -285,28 +286,16 @@ struct ContentView: View {
         )
     }
 
-    // MARK: - Swipe Actions
-
-    private func editAction(_ block: ScheduleBlock) -> some View {
-        Button {
-            editingBlock = block
-        } label: {
-            Label("Edit", systemImage: "pencil")
-        }
-    }
-
-    private func deleteAction(_ block: ScheduleBlock) -> some View {
-        Button(role: .destructive) {
-            delete(block)
-        } label: {
-            Label("Delete", systemImage: "trash")
-        }
-    }
-
     // MARK: - Actions
 
     private func delete(_ block: ScheduleBlock) {
         blocks.removeAll { $0.id == block.id }
+    }
+
+    private func toggleDone(_ block: ScheduleBlock) {
+        if let idx = blocks.firstIndex(where: { $0.id == block.id }) {
+            blocks[idx].isDone.toggle()
+        }
     }
 
     private func goToNextDay() {
@@ -318,6 +307,51 @@ struct ContentView: View {
     private func goToPreviousDay() {
         withAnimation(.easeInOut(duration: 0.2)) {
             selectedDate = Calendar.current.date(byAdding: .day, value: -1, to: selectedDate) ?? selectedDate
+        }
+    }
+
+    private func moveTodayBlocks(from source: IndexSet, to destination: Int) {
+        let dayIndices = blocks.indices.filter { blocks[$0].day == selectedDayStart }
+        var dayBlocks = dayIndices.map { blocks[$0] }
+
+        dayBlocks.move(fromOffsets: source, toOffset: destination)
+
+        for (pos, idx) in dayIndices.enumerated() {
+            blocks[idx] = dayBlocks[pos]
+        }
+        recalculateTimesForSelectedDay()
+    }
+
+    private func recalculateTimesForSelectedDay() {
+        let cal = Calendar.current
+        let dayIndices = blocks.indices.filter { blocks[$0].day == selectedDayStart }
+        guard !dayIndices.isEmpty else { return }
+
+        let earliest = dayIndices
+            .map { blocks[$0].startTime }
+            .min() ?? (cal.date(bySettingHour: 8, minute: 0, second: 0, of: selectedDayStart) ?? selectedDayStart)
+
+        var current = earliest
+        for idx in dayIndices {
+            blocks[idx].startTime = current
+            current = cal.date(byAdding: .minute, value: blocks[idx].durationMinutes, to: current) ?? current
+        }
+    }
+}
+
+// MARK: - GreetingBoxView
+
+struct GreetingBoxView: View {
+    var body: some View {
+        HStack {
+            Text(greetingText())
+                .font(.system(.headline, design: .rounded))
+                .padding(.horizontal, 14)
+                .padding(.vertical, 8)
+                .background(
+                    Capsule().fill(DailyTheme.babyPink.opacity(0.25))
+                )
+            Spacer()
         }
     }
 }
@@ -377,7 +411,6 @@ struct QuickAddButton: View {
 
 struct AddBlockView: View {
     @Environment(\.dismiss) private var dismiss
-
     let day: Date
 
     @State private var activity: String = ""
@@ -407,11 +440,7 @@ struct AddBlockView: View {
                     }
 
                     Section("Time") {
-                        DatePicker(
-                            "Start",
-                            selection: $startTimeOnly,
-                            displayedComponents: .hourAndMinute
-                        )
+                        DatePicker("Start", selection: $startTimeOnly, displayedComponents: .hourAndMinute)
                     }
 
                     Section("Duration") {
@@ -438,7 +467,6 @@ struct AddBlockView: View {
                 ToolbarItem(placement: .topBarLeading) {
                     Button("Cancel") { dismiss() }
                 }
-
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Save") {
                         let trimmed = activity.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -467,7 +495,6 @@ struct AddBlockView: View {
 
 struct EditBlockView: View {
     @Environment(\.dismiss) private var dismiss
-
     let day: Date
 
     @State private var activity: String
@@ -516,11 +543,7 @@ struct EditBlockView: View {
                     }
 
                     Section("Time") {
-                        DatePicker(
-                            "Start",
-                            selection: $startTimeOnly,
-                            displayedComponents: .hourAndMinute
-                        )
+                        DatePicker("Start", selection: $startTimeOnly, displayedComponents: .hourAndMinute)
                     }
 
                     Section("Duration") {
@@ -556,7 +579,6 @@ struct EditBlockView: View {
                 ToolbarItem(placement: .topBarLeading) {
                     Button("Cancel") { dismiss() }
                 }
-
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Save") {
                         let trimmed = activity.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -570,7 +592,8 @@ struct EditBlockView: View {
                                 activity: trimmed,
                                 startTime: fullStart,
                                 durationMinutes: durationMinutes,
-                                notes: notes
+                                notes: notes,
+                                isDone: original.isDone
                             )
                         )
                         dismiss()
@@ -612,7 +635,7 @@ extension View {
     func glassPanel() -> some View { modifier(GlassPanel()) }
 }
 
-// MARK: - Helpers
+// MARK: - Helpers / Storage
 
 private func greetingText() -> String {
     let hour = Calendar.current.component(.hour, from: Date())
@@ -628,7 +651,9 @@ private func timeString(_ date: Date) -> String {
 }
 
 private func shortDate(_ date: Date) -> String {
-    date.formatted(.dateTime.month(.abbreviated).day())
+    let f = DateFormatter()
+    f.dateFormat = "MMM d"
+    return f.string(from: date)
 }
 
 private func combine(day: Date, time: Date) -> Date {
@@ -659,11 +684,3 @@ private func saveBlocks(_ blocks: [ScheduleBlock]) {
     guard let data = try? JSONEncoder().encode(blocks) else { return }
     UserDefaults.standard.set(data, forKey: Storage.blocksKey)
 }
-
-
-// MARK: - Preview
-
-#Preview {
-    ContentView()
-}
-
