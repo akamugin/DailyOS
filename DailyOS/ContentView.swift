@@ -1,4 +1,5 @@
 import SwiftUI
+import SwiftData
 
 // MARK: - Model
 
@@ -46,6 +47,73 @@ struct ScheduleBlock: Identifiable, Equatable, Codable {
     }
 }
 
+@Model
+final class ScheduleBlockEntity {
+    var id: UUID = UUID()
+    var day: Date = Date()
+    var activity: String = ""
+    var startTime: Date = Date()
+    var durationMinutes: Int = 30
+    var notes: String = ""
+    var isDone: Bool = false
+    var updatedAt: Date = Date()
+
+    init(
+        id: UUID = UUID(),
+        day: Date,
+        activity: String,
+        startTime: Date,
+        durationMinutes: Int,
+        notes: String = "",
+        isDone: Bool = false,
+        updatedAt: Date = Date()
+    ) {
+        self.id = id
+        self.day = Calendar.current.startOfDay(for: day)
+        self.activity = activity
+        self.startTime = startTime
+        self.durationMinutes = durationMinutes
+        self.notes = notes
+        self.isDone = isDone
+        self.updatedAt = updatedAt
+    }
+
+    convenience init(from block: ScheduleBlock) {
+        self.init(
+            id: block.id,
+            day: block.day,
+            activity: block.activity,
+            startTime: block.startTime,
+            durationMinutes: block.durationMinutes,
+            notes: block.notes,
+            isDone: block.isDone,
+            updatedAt: Date()
+        )
+    }
+
+    func asDraft() -> ScheduleBlock {
+        ScheduleBlock(
+            id: id,
+            day: day,
+            activity: activity,
+            startTime: startTime,
+            durationMinutes: durationMinutes,
+            notes: notes,
+            isDone: isDone
+        )
+    }
+
+    func apply(from block: ScheduleBlock) {
+        day = Calendar.current.startOfDay(for: block.day)
+        activity = block.activity
+        startTime = block.startTime
+        durationMinutes = block.durationMinutes
+        notes = block.notes
+        isDone = block.isDone
+        updatedAt = Date()
+    }
+}
+
 // MARK: - Theme
 
 enum DailyTheme {
@@ -60,10 +128,18 @@ enum DailyTheme {
 // MARK: - ContentView
 
 struct ContentView: View {
-    @State private var blocks: [ScheduleBlock] = []
-    @State private var didLoadBlocks = false
+    @Environment(\.modelContext) private var modelContext
+    @Query(
+        sort: [
+            SortDescriptor(\ScheduleBlockEntity.day, order: .forward),
+            SortDescriptor(\ScheduleBlockEntity.startTime, order: .forward)
+        ]
+    ) private var persistedBlocks: [ScheduleBlockEntity]
+
+    @State private var didRunMigration = false
     @State private var showAdd = false
     @State private var editingBlock: ScheduleBlock?
+    @State private var pendingDeleteBlock: ScheduleBlock?
     @State private var selectedDate = Date()
     @State private var showCalendar = false
     @State private var swipeDirection = 0
@@ -73,7 +149,24 @@ struct ContentView: View {
     }
 
     private var todaysBlocks: [ScheduleBlock] {
-        blocks.filter { $0.day == selectedDayStart }
+        persistedBlocks
+            .filter { $0.day == selectedDayStart }
+            .sorted { $0.startTime < $1.startTime }
+            .map { $0.asDraft() }
+    }
+    
+    private func insertNewBlockChronologically(_ newBlock: ScheduleBlock) {
+        var dayBlocks = persistedBlocks
+            .filter { $0.day == selectedDayStart }
+            .sorted { $0.startTime < $1.startTime }
+
+        let newEntity = ScheduleBlockEntity(from: newBlock)
+        modelContext.insert(newEntity)
+        dayBlocks.append(newEntity)
+        dayBlocks.sort { $0.startTime < $1.startTime }
+
+        let anchor = dayBlocks.map(\.startTime).min() ?? newEntity.startTime
+        recalculateTimesForSelectedDay(anchor: anchor, dayBlocks: dayBlocks)
     }
 
     var body: some View {
@@ -109,7 +202,7 @@ struct ContentView: View {
                                         Button { editingBlock = block } label: {
                                             Label("Edit", systemImage: "pencil")
                                         }
-                                        Button(role: .destructive) { delete(block) } label: {
+                                        Button(role: .destructive) { pendingDeleteBlock = block } label: {
                                             Label("Delete", systemImage: "trash")
                                         }
                                     }
@@ -172,6 +265,7 @@ struct ContentView: View {
                             )
                     }
                     .buttonStyle(.plain)
+                    .accessibilityLabel("Jump to today")
                 }
 
                 ToolbarItem(placement: .topBarTrailing) {
@@ -182,6 +276,7 @@ struct ContentView: View {
                             .background(Circle().fill(DailyTheme.skyBlue.opacity(0.22)))
                     }
                     .buttonStyle(.plain)
+                    .accessibilityLabel("Open calendar")
                 }
 
                 ToolbarItem(placement: .topBarTrailing) {
@@ -192,18 +287,22 @@ struct ContentView: View {
                             .background(Circle().fill(DailyTheme.babyPink.opacity(0.22)))
                     }
                     .buttonStyle(.plain)
+                    .accessibilityLabel("Add schedule block")
                 }
             }
             .sheet(isPresented: $showAdd) {
-                AddBlockView(day: selectedDate) { blocks.append($0) }
+                AddBlockView(day: selectedDate) { newBlock in
+                    insertNewBlockChronologically(newBlock)
+                }
             }
             .sheet(item: $editingBlock) { block in
                 EditBlockView(
                     day: selectedDate,
                     block: block,
                     onSave: { updated in
-                        if let idx = blocks.firstIndex(where: { $0.id == updated.id }) {
-                            blocks[idx] = updated
+                        if let entity = entity(for: updated.id) {
+                            entity.apply(from: updated)
+                            normalizeDaySchedule(for: updated.day)
                         }
                         editingBlock = nil
                     },
@@ -218,15 +317,33 @@ struct ContentView: View {
                     .presentationDetents([.medium, .large])
                     .presentationDragIndicator(.visible)
             }
+            .confirmationDialog(
+                "Delete this block?",
+                isPresented: Binding(
+                    get: { pendingDeleteBlock != nil },
+                    set: { if !$0 { pendingDeleteBlock = nil } }
+                ),
+                titleVisibility: .visible
+            ) {
+                Button("Delete", role: .destructive) {
+                    if let block = pendingDeleteBlock {
+                        delete(block)
+                    }
+                    pendingDeleteBlock = nil
+                }
+                Button("Cancel", role: .cancel) {
+                    pendingDeleteBlock = nil
+                }
+            } message: {
+                if let block = pendingDeleteBlock {
+                    Text("\"\(block.activity)\" will be permanently removed.")
+                }
+            }
         }
         .onAppear {
-            guard !didLoadBlocks else { return }
-            blocks = loadBlocks()
-            didLoadBlocks = true
-        }
-        .onChange(of: blocks) { _, newValue in
-            guard didLoadBlocks else { return }
-            saveBlocks(newValue)
+            guard !didRunMigration else { return }
+            migrateLegacyBlocksIfNeeded()
+            didRunMigration = true
         }
     }
 
@@ -252,6 +369,7 @@ struct ContentView: View {
                     .foregroundStyle(block.isDone ? DailyTheme.skyBlue : .secondary)
             }
             .buttonStyle(.plain)
+            .accessibilityLabel(block.isDone ? "Mark block as not done" : "Mark block as done")
 
             Text(timeString(block.startTime))
                 .font(.system(.body, design: .monospaced))
@@ -273,6 +391,7 @@ struct ContentView: View {
 
             Image(systemName: "pencil")
                 .foregroundStyle(DailyTheme.skyBlue.opacity(0.9))
+                .accessibilityHidden(true)
         }
         .padding(.vertical, 10)
         .padding(.horizontal, 14)
@@ -284,17 +403,22 @@ struct ContentView: View {
             RoundedRectangle(cornerRadius: 20)
                 .stroke(DailyTheme.stroke, lineWidth: 1)
         )
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(block.activity), \(timeString(block.startTime)), \(block.durationMinutes) minutes")
+        .accessibilityHint("Double tap to edit")
     }
 
     // MARK: - Actions
 
     private func delete(_ block: ScheduleBlock) {
-        blocks.removeAll { $0.id == block.id }
+        guard let entity = entity(for: block.id) else { return }
+        modelContext.delete(entity)
     }
 
     private func toggleDone(_ block: ScheduleBlock) {
-        if let idx = blocks.firstIndex(where: { $0.id == block.id }) {
-            blocks[idx].isDone.toggle()
+        if let entity = entity(for: block.id) {
+            entity.isDone.toggle()
+            entity.updatedAt = Date()
         }
     }
 
@@ -311,32 +435,55 @@ struct ContentView: View {
     }
 
     private func moveTodayBlocks(from source: IndexSet, to destination: Int) {
-        let dayIndices = blocks.indices.filter { blocks[$0].day == selectedDayStart }
-        var dayBlocks = dayIndices.map { blocks[$0] }
+        var dayBlocks = persistedBlocks
+            .filter { $0.day == selectedDayStart }
+            .sorted { $0.startTime < $1.startTime }
+        guard !dayBlocks.isEmpty else { return }
 
+        let anchor = dayBlocks.map(\.startTime).min() ?? selectedDayStart
         dayBlocks.move(fromOffsets: source, toOffset: destination)
-
-        for (pos, idx) in dayIndices.enumerated() {
-            blocks[idx] = dayBlocks[pos]
-        }
-        recalculateTimesForSelectedDay()
+        recalculateTimesForSelectedDay(anchor: anchor, dayBlocks: dayBlocks)
     }
 
-    private func recalculateTimesForSelectedDay() {
+    private func recalculateTimesForSelectedDay(anchor: Date, dayBlocks: [ScheduleBlockEntity]) {
         let cal = Calendar.current
-        let dayIndices = blocks.indices.filter { blocks[$0].day == selectedDayStart }
-        guard !dayIndices.isEmpty else { return }
+        var current = anchor
 
-        let earliest = dayIndices
-            .map { blocks[$0].startTime }
-            .min() ?? (cal.date(bySettingHour: 8, minute: 0, second: 0, of: selectedDayStart) ?? selectedDayStart)
-
-        var current = earliest
-        for idx in dayIndices {
-            blocks[idx].startTime = current
-            current = cal.date(byAdding: .minute, value: blocks[idx].durationMinutes, to: current) ?? current
+        for block in dayBlocks {
+            block.startTime = current
+            block.updatedAt = Date()
+            current = cal.date(byAdding: .minute, value: block.durationMinutes, to: current) ?? current
         }
     }
+
+    private func normalizeDaySchedule(for day: Date) {
+        let dayStart = Calendar.current.startOfDay(for: day)
+        let dayBlocks = persistedBlocks
+            .filter { $0.day == dayStart }
+            .sorted { $0.startTime < $1.startTime }
+        guard !dayBlocks.isEmpty else { return }
+        let anchor = dayBlocks.map(\.startTime).min() ?? dayStart
+        recalculateTimesForSelectedDay(anchor: anchor, dayBlocks: dayBlocks)
+    }
+
+    private func entity(for id: UUID) -> ScheduleBlockEntity? {
+        persistedBlocks.first { $0.id == id }
+    }
+
+    private func migrateLegacyBlocksIfNeeded() {
+        let defaults = UserDefaults.standard
+        if defaults.bool(forKey: Storage.cloudMigrationCompleteKey) { return }
+
+        if persistedBlocks.isEmpty, let legacyBlocks = loadLegacyBlocks() {
+            for block in legacyBlocks {
+                modelContext.insert(ScheduleBlockEntity(from: block))
+            }
+        }
+
+        defaults.set(true, forKey: Storage.cloudMigrationCompleteKey)
+        defaults.removeObject(forKey: Storage.legacyBlocksKey)
+    }
+
 }
 
 // MARK: - GreetingBoxView
@@ -471,6 +618,7 @@ struct AddBlockView: View {
                     Button("Save") {
                         let trimmed = activity.trimmingCharacters(in: .whitespacesAndNewlines)
                         guard !trimmed.isEmpty else { return }
+                        let normalizedNotes = notes.trimmingCharacters(in: .whitespacesAndNewlines)
 
                         let fullStart = combine(day: day, time: startTimeOnly)
                         onSave(
@@ -479,7 +627,7 @@ struct AddBlockView: View {
                                 activity: trimmed,
                                 startTime: fullStart,
                                 durationMinutes: durationMinutes,
-                                notes: notes
+                                notes: normalizedNotes
                             )
                         )
                         dismiss()
@@ -583,6 +731,7 @@ struct EditBlockView: View {
                     Button("Save") {
                         let trimmed = activity.trimmingCharacters(in: .whitespacesAndNewlines)
                         guard !trimmed.isEmpty else { return }
+                        let normalizedNotes = notes.trimmingCharacters(in: .whitespacesAndNewlines)
 
                         let fullStart = combine(day: day, time: startTimeOnly)
                         onSave(
@@ -592,7 +741,7 @@ struct EditBlockView: View {
                                 activity: trimmed,
                                 startTime: fullStart,
                                 durationMinutes: durationMinutes,
-                                notes: notes,
+                                notes: normalizedNotes,
                                 isDone: original.isDone
                             )
                         )
@@ -645,15 +794,11 @@ private func greetingText() -> String {
 }
 
 private func timeString(_ date: Date) -> String {
-    let f = DateFormatter()
-    f.dateFormat = "h:mm a"
-    return f.string(from: date)
+    Formatters.time.string(from: date)
 }
 
 private func shortDate(_ date: Date) -> String {
-    let f = DateFormatter()
-    f.dateFormat = "MMM d"
-    return f.string(from: date)
+    Formatters.shortDate.string(from: date)
 }
 
 private func combine(day: Date, time: Date) -> Date {
@@ -672,15 +817,30 @@ private func combine(day: Date, time: Date) -> Date {
 }
 
 private enum Storage {
-    static let blocksKey = "dailyos.blocks.v1"
+    static let legacyBlocksKey = "dailyos.blocks.v1"
+    static let cloudMigrationCompleteKey = "dailyos.cloudMigrationComplete.v1"
 }
 
-private func loadBlocks() -> [ScheduleBlock] {
-    guard let data = UserDefaults.standard.data(forKey: Storage.blocksKey) else { return [] }
-    return (try? JSONDecoder().decode([ScheduleBlock].self, from: data)) ?? []
+private enum Formatters {
+    static let time: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "h:mm a"
+        return formatter
+    }()
+
+    static let shortDate: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MMM d"
+        return formatter
+    }()
 }
 
-private func saveBlocks(_ blocks: [ScheduleBlock]) {
-    guard let data = try? JSONEncoder().encode(blocks) else { return }
-    UserDefaults.standard.set(data, forKey: Storage.blocksKey)
+private func loadLegacyBlocks() -> [ScheduleBlock]? {
+    guard let data = UserDefaults.standard.data(forKey: Storage.legacyBlocksKey) else { return nil }
+    return try? JSONDecoder().decode([ScheduleBlock].self, from: data)
+}
+
+#Preview {
+    ContentView()
+        .modelContainer(for: ScheduleBlockEntity.self, inMemory: true)
 }
