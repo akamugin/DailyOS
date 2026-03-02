@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import UserNotifications
 
 // MARK: - Model
 
@@ -342,7 +343,9 @@ struct ContentView: View {
         }
         .onAppear {
             guard !didRunMigration else { return }
+            ReminderCenter.requestAuthorizationIfNeeded()
             migrateLegacyBlocksIfNeeded()
+            ReminderCenter.sync(for: persistedBlocks.map { $0.asDraft() })
             didRunMigration = true
         }
     }
@@ -413,12 +416,14 @@ struct ContentView: View {
     private func delete(_ block: ScheduleBlock) {
         guard let entity = entity(for: block.id) else { return }
         modelContext.delete(entity)
+        ReminderCenter.remove(for: [block.id])
     }
 
     private func toggleDone(_ block: ScheduleBlock) {
         if let entity = entity(for: block.id) {
             entity.isDone.toggle()
             entity.updatedAt = Date()
+            ReminderCenter.sync(for: [entity.asDraft()])
         }
     }
 
@@ -454,6 +459,8 @@ struct ContentView: View {
             block.updatedAt = Date()
             current = cal.date(byAdding: .minute, value: block.durationMinutes, to: current) ?? current
         }
+
+        ReminderCenter.sync(for: dayBlocks.map { $0.asDraft() })
     }
 
     private func normalizeDaySchedule(for day: Date) {
@@ -814,6 +821,52 @@ private func combine(day: Date, time: Date) -> Date {
     comps.minute = timeComps.minute
 
     return cal.date(from: comps) ?? day
+}
+
+private enum ReminderCenter {
+    private static let center = UNUserNotificationCenter.current()
+
+    private static func reminderID(for id: UUID) -> String {
+        "dailyos.schedule.\(id.uuidString)"
+    }
+
+    static func requestAuthorizationIfNeeded() {
+        center.getNotificationSettings { settings in
+            guard settings.authorizationStatus == .notDetermined else { return }
+            center.requestAuthorization(options: [.alert, .sound, .badge]) { _, _ in }
+        }
+    }
+
+    static func remove(for ids: [UUID]) {
+        let identifiers = ids.map(reminderID(for:))
+        center.removePendingNotificationRequests(withIdentifiers: identifiers)
+        center.removeDeliveredNotifications(withIdentifiers: identifiers)
+    }
+
+    static func sync(for blocks: [ScheduleBlock]) {
+        let identifiers = blocks.map { reminderID(for: $0.id) }
+        center.removePendingNotificationRequests(withIdentifiers: identifiers)
+        center.removeDeliveredNotifications(withIdentifiers: identifiers)
+
+        let now = Date()
+        let cal = Calendar.current
+
+        for block in blocks where !block.isDone && block.startTime > now {
+            let content = UNMutableNotificationContent()
+            content.title = block.activity
+            content.body = "Starts at \(timeString(block.startTime))"
+            content.sound = .default
+
+            let dateComponents = cal.dateComponents([.year, .month, .day, .hour, .minute], from: block.startTime)
+            let trigger = UNCalendarNotificationTrigger(dateMatching: dateComponents, repeats: false)
+            let request = UNNotificationRequest(
+                identifier: reminderID(for: block.id),
+                content: content,
+                trigger: trigger
+            )
+            center.add(request) { _ in }
+        }
+    }
 }
 
 private enum Storage {
