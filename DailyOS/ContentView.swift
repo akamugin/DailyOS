@@ -10,6 +10,7 @@ struct ScheduleBlock: Identifiable, Equatable, Codable {
     var activity: String
     var startTime: Date
     var durationMinutes: Int
+    var reminderLeadMinutes: Int
     var notes: String
     var isDone: Bool
 
@@ -19,6 +20,7 @@ struct ScheduleBlock: Identifiable, Equatable, Codable {
         activity: String,
         startTime: Date,
         durationMinutes: Int,
+        reminderLeadMinutes: Int = 10,
         notes: String = "",
         isDone: Bool = false
     ) {
@@ -27,12 +29,13 @@ struct ScheduleBlock: Identifiable, Equatable, Codable {
         self.activity = activity
         self.startTime = startTime
         self.durationMinutes = durationMinutes
+        self.reminderLeadMinutes = reminderLeadMinutes
         self.notes = notes
         self.isDone = isDone
     }
 
     enum CodingKeys: String, CodingKey {
-        case id, day, activity, startTime, durationMinutes, notes, isDone
+        case id, day, activity, startTime, durationMinutes, reminderLeadMinutes, notes, isDone
     }
 
     init(from decoder: Decoder) throws {
@@ -42,6 +45,7 @@ struct ScheduleBlock: Identifiable, Equatable, Codable {
         activity = try c.decode(String.self, forKey: .activity)
         startTime = try c.decode(Date.self, forKey: .startTime)
         durationMinutes = try c.decode(Int.self, forKey: .durationMinutes)
+        reminderLeadMinutes = (try? c.decode(Int.self, forKey: .reminderLeadMinutes)) ?? 10
         notes = (try? c.decode(String.self, forKey: .notes)) ?? ""
         isDone = (try? c.decode(Bool.self, forKey: .isDone)) ?? false
         day = Calendar.current.startOfDay(for: day)
@@ -55,6 +59,7 @@ final class ScheduleBlockEntity {
     var activity: String = ""
     var startTime: Date = Date()
     var durationMinutes: Int = 30
+    var reminderLeadMinutes: Int = 10
     var notes: String = ""
     var isDone: Bool = false
     var updatedAt: Date = Date()
@@ -65,6 +70,7 @@ final class ScheduleBlockEntity {
         activity: String,
         startTime: Date,
         durationMinutes: Int,
+        reminderLeadMinutes: Int = 10,
         notes: String = "",
         isDone: Bool = false,
         updatedAt: Date = Date()
@@ -74,6 +80,7 @@ final class ScheduleBlockEntity {
         self.activity = activity
         self.startTime = startTime
         self.durationMinutes = durationMinutes
+        self.reminderLeadMinutes = reminderLeadMinutes
         self.notes = notes
         self.isDone = isDone
         self.updatedAt = updatedAt
@@ -86,6 +93,7 @@ final class ScheduleBlockEntity {
             activity: block.activity,
             startTime: block.startTime,
             durationMinutes: block.durationMinutes,
+            reminderLeadMinutes: block.reminderLeadMinutes,
             notes: block.notes,
             isDone: block.isDone,
             updatedAt: Date()
@@ -99,6 +107,7 @@ final class ScheduleBlockEntity {
             activity: activity,
             startTime: startTime,
             durationMinutes: durationMinutes,
+            reminderLeadMinutes: reminderLeadMinutes,
             notes: notes,
             isDone: isDone
         )
@@ -109,6 +118,7 @@ final class ScheduleBlockEntity {
         activity = block.activity
         startTime = block.startTime
         durationMinutes = block.durationMinutes
+        reminderLeadMinutes = block.reminderLeadMinutes
         notes = block.notes
         isDone = block.isDone
         updatedAt = Date()
@@ -118,12 +128,16 @@ final class ScheduleBlockEntity {
 // MARK: - Theme
 
 enum DailyTheme {
-    static let babyPink = Color(red: 1.00, green: 0.83, blue: 0.90)
-    static let skyBlue  = Color(red: 0.74, green: 0.90, blue: 1.00)
-    static let lavender = Color(red: 0.86, green: 0.82, blue: 1.00)
-    static let cream    = Color(red: 0.99, green: 0.97, blue: 0.95)
+    static let babyPink = Color(red: 0.99, green: 0.86, blue: 0.92)
+    static let skyBlue = Color(red: 0.82, green: 0.92, blue: 1.00)
+    static let babyPurple = Color(red: 0.88, green: 0.84, blue: 1.00)
+    static let pinkMist = Color(red: 0.99, green: 0.94, blue: 0.97)
+    static let lilacMist = Color(red: 0.95, green: 0.93, blue: 1.00)
+    static let cream = Color(red: 0.99, green: 0.98, blue: 0.97)
+    static let roseText = Color(red: 0.38, green: 0.29, blue: 0.34)
+    static let ribbon = Color(red: 0.91, green: 0.78, blue: 0.97)
 
-    static let stroke = skyBlue.opacity(0.35)
+    static let stroke = roseText.opacity(0.12)
 }
 
 // MARK: - ContentView
@@ -172,64 +186,71 @@ struct ContentView: View {
 
     var body: some View {
         NavigationStack {
-            VStack(alignment: .leading) {
-                GreetingBoxView()
-                    .padding(.horizontal, 18)
-                    .padding(.top, 6)
+            ZStack {
+                PastelOrbBackground()
 
-                Text(shortDate(selectedDate))
-                    .font(.system(size: 34, weight: .bold, design: .rounded))
-                    .padding(.horizontal, 26)
+                VStack(alignment: .leading, spacing: 8) {
+                    GreetingBoxView()
+                        .padding(.horizontal, 18)
+                        .padding(.top, 6)
 
-                List {
-                    Section {
-                        if todaysBlocks.isEmpty {
-                            VStack(alignment: .leading, spacing: 10) {
-                                emptyState
-                                Spacer()
-                            }
-                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                            .glassPanel()
-                            .padding(.horizontal, 14)
-                            .padding(.top, 10)
-                            .listRowSeparator(.hidden)
-                            .listRowBackground(Color.clear)
-                        } else {
-                            ForEach(todaysBlocks) { block in
-                                blockRow(block)
-                                    .contentShape(Rectangle())
-                                    .onTapGesture { editingBlock = block }
-                                    .swipeActions(edge: .trailing) {
-                                        Button { editingBlock = block } label: {
-                                            Label("Edit", systemImage: "pencil")
+                    HStack(alignment: .firstTextBaseline) {
+                        Text(shortDate(selectedDate))
+                            .cuteHeadline()
+                        Spacer()
+                        HStack(spacing: 5) {
+                            Image(systemName: "sparkles")
+                                .font(.system(size: 10, weight: .semibold))
+                            Text("\(todaysBlocks.count) plans")
+                                .cuteCaption()
+                        }
+                        .foregroundStyle(DailyTheme.roseText.opacity(0.85))
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .background(Capsule().fill(DailyTheme.lilacMist.opacity(0.8)))
+                    }
+                    .padding(.horizontal, 24)
+
+                    List {
+                        Section {
+                            if todaysBlocks.isEmpty {
+                                VStack(alignment: .leading, spacing: 10) {
+                                    emptyState
+                                    Spacer()
+                                }
+                                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                                .glassPanel()
+                                .padding(.horizontal, 14)
+                                .padding(.top, 10)
+                                .listRowSeparator(.hidden)
+                                .listRowBackground(Color.clear)
+                            } else {
+                                ForEach(todaysBlocks) { block in
+                                    blockRow(block)
+                                        .contentShape(Rectangle())
+                                        .onTapGesture { editingBlock = block }
+                                        .swipeActions(edge: .trailing) {
+                                            Button { editingBlock = block } label: {
+                                                Label("Edit", systemImage: "pencil")
+                                            }
+                                            Button(role: .destructive) { pendingDeleteBlock = block } label: {
+                                                Label("Delete", systemImage: "trash")
+                                            }
                                         }
-                                        Button(role: .destructive) { pendingDeleteBlock = block } label: {
-                                            Label("Delete", systemImage: "trash")
-                                        }
-                                    }
-                                    .listRowSeparator(.hidden)
-                                    .listRowBackground(Color.clear)
+                                        .listRowSeparator(.hidden)
+                                        .listRowBackground(Color.clear)
+                                }
+                                // NOTE: List reordering only works in Edit mode.
+                                // Keeping the handler here so you can re-enable later if you want.
+                                .onMove(perform: moveTodayBlocks)
                             }
-                            // NOTE: List reordering only works in Edit mode.
-                            // Keeping the handler here so you can re-enable later if you want.
-                            .onMove(perform: moveTodayBlocks)
                         }
                     }
+                    .listStyle(.plain)
+                    .scrollContentBackground(.hidden)
                 }
-                .listStyle(.plain)
-                .scrollContentBackground(.hidden)
             }
-            .background(
-                LinearGradient(
-                    colors: [
-                        DailyTheme.skyBlue.opacity(0.35),
-                        DailyTheme.babyPink.opacity(0.25),
-                        Color.white
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-            )
+            .tint(DailyTheme.ribbon)
             .id(selectedDayStart)
             .transition(
                 .asymmetric(
@@ -258,11 +279,11 @@ struct ContentView: View {
                         }
                     } label: {
                         Text(Calendar.current.isDateInToday(selectedDate) ? "Today" : shortDate(selectedDate))
-                            .font(.system(.headline, design: .rounded))
+                            .cuteBody()
                             .padding(.horizontal, 12)
                             .padding(.vertical, 6)
                             .background(
-                                Capsule().fill(DailyTheme.babyPink.opacity(0.22))
+                                Capsule().fill(DailyTheme.babyPurple.opacity(0.42))
                             )
                     }
                     .buttonStyle(.plain)
@@ -271,10 +292,7 @@ struct ContentView: View {
 
                 ToolbarItem(placement: .topBarTrailing) {
                     Button { showCalendar = true } label: {
-                        Image(systemName: "calendar")
-                            .font(.system(.body, design: .rounded))
-                            .padding(8)
-                            .background(Circle().fill(DailyTheme.skyBlue.opacity(0.22)))
+                        toolbarBubble(systemName: "calendar", fill: DailyTheme.skyBlue)
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("Open calendar")
@@ -282,10 +300,7 @@ struct ContentView: View {
 
                 ToolbarItem(placement: .topBarTrailing) {
                     Button { showAdd = true } label: {
-                        Image(systemName: "plus")
-                            .font(.system(.body, design: .rounded))
-                            .padding(8)
-                            .background(Circle().fill(DailyTheme.babyPink.opacity(0.22)))
+                        toolbarBubble(systemName: "plus", fill: DailyTheme.babyPink)
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("Add schedule block")
@@ -354,10 +369,10 @@ struct ContentView: View {
 
     private var emptyState: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Nothing planned yet 🌷")
-                .font(.system(.headline, design: .rounded))
-            Text("Tap + to add something cute to your day")
-                .font(.system(.subheadline, design: .rounded))
+            Text("Nothing planned yet")
+                .cuteBody(weight: .demiBold)
+            Text("Tap + to add something sweet to your day")
+                .cuteCaption()
                 .foregroundStyle(.secondary)
         }
         .padding(.vertical, 8)
@@ -368,47 +383,75 @@ struct ContentView: View {
         HStack(spacing: 12) {
             Button { toggleDone(block) } label: {
                 Image(systemName: block.isDone ? "checkmark.circle.fill" : "circle")
-                    .font(.system(size: 20, weight: .semibold, design: .rounded))
-                    .foregroundStyle(block.isDone ? DailyTheme.skyBlue : .secondary)
+                    .font(.system(size: 22, weight: .semibold, design: .rounded))
+                    .foregroundStyle(block.isDone ? DailyTheme.babyPurple : DailyTheme.roseText.opacity(0.5))
             }
             .buttonStyle(.plain)
             .accessibilityLabel(block.isDone ? "Mark block as not done" : "Mark block as done")
 
             Text(timeString(block.startTime))
-                .font(.system(.body, design: .monospaced))
-                .foregroundStyle(.secondary)
-                .frame(width: 70, alignment: .leading)
+                .font(.custom("AvenirNext-Medium", size: 15))
+                .foregroundStyle(DailyTheme.roseText.opacity(0.75))
+                .frame(width: 74, alignment: .leading)
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(block.activity)
-                    .font(.system(.headline, design: .rounded))
+                    .cuteBody(weight: .demiBold)
                     .strikethrough(block.isDone, color: .secondary)
-                    .foregroundStyle(block.isDone ? .secondary : .primary)
+                    .foregroundStyle(block.isDone ? .secondary : DailyTheme.roseText)
 
                 Text("\(block.durationMinutes) min")
-                    .font(.system(.subheadline, design: .rounded))
-                    .foregroundStyle(.secondary)
+                    .cuteCaption()
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(Capsule().fill(DailyTheme.pinkMist.opacity(0.9)))
             }
 
             Spacer()
 
             Image(systemName: "pencil")
-                .foregroundStyle(DailyTheme.skyBlue.opacity(0.9))
+                .foregroundStyle(DailyTheme.skyBlue.opacity(0.85))
                 .accessibilityHidden(true)
         }
         .padding(.vertical, 10)
         .padding(.horizontal, 14)
         .background(
-            RoundedRectangle(cornerRadius: 20)
-                .fill(Color.white.opacity(0.78))
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .fill(Color.white.opacity(0.75))
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 20)
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
                 .stroke(DailyTheme.stroke, lineWidth: 1)
         )
+        .overlay(alignment: .topTrailing) {
+            Image(systemName: "heart.fill")
+                .font(.system(size: 9))
+                .foregroundStyle(DailyTheme.ribbon.opacity(0.8))
+                .padding(8)
+        }
+        .shadow(color: DailyTheme.skyBlue.opacity(0.15), radius: 8, x: 0, y: 4)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(block.activity), \(timeString(block.startTime)), \(block.durationMinutes) minutes")
         .accessibilityHint("Double tap to edit")
+    }
+
+    private func toolbarBubble(systemName: String, fill: Color) -> some View {
+        Image(systemName: systemName)
+            .font(.system(size: 14, weight: .semibold))
+            .foregroundStyle(DailyTheme.roseText)
+            .padding(9)
+            .background(
+                Circle().fill(fill.opacity(0.4))
+            )
+            .overlay(
+                Circle().stroke(Color.white.opacity(0.7), lineWidth: 1)
+            )
+            .overlay(alignment: .topTrailing) {
+                Image(systemName: "sparkles")
+                    .font(.system(size: 8))
+                    .foregroundStyle(.white.opacity(0.9))
+                    .offset(x: 2, y: -2)
+            }
     }
 
     // MARK: - Actions
@@ -498,13 +541,21 @@ struct ContentView: View {
 struct GreetingBoxView: View {
     var body: some View {
         HStack {
-            Text(greetingText())
-                .font(.system(.headline, design: .rounded))
-                .padding(.horizontal, 14)
-                .padding(.vertical, 8)
-                .background(
-                    Capsule().fill(DailyTheme.babyPink.opacity(0.25))
-                )
+            HStack(spacing: 7) {
+                Image(systemName: "sparkles")
+                    .font(.system(size: 12, weight: .semibold))
+                Text(greetingText())
+                    .cuteBody(weight: .demiBold)
+            }
+            .foregroundStyle(DailyTheme.roseText)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            .background(
+                Capsule().fill(DailyTheme.babyPink.opacity(0.38))
+            )
+            .overlay(
+                Capsule().stroke(Color.white.opacity(0.65), lineWidth: 1)
+            )
             Spacer()
         }
     }
@@ -518,7 +569,8 @@ struct CalendarView: View {
 
     var body: some View {
         NavigationStack {
-            VStack {
+            ZStack {
+                PastelOrbBackground()
                 DatePicker(
                     "",
                     selection: $selectedDate,
@@ -526,12 +578,16 @@ struct CalendarView: View {
                 )
                 .datePickerStyle(.graphical)
                 .labelsHidden()
+                .padding(12)
+                .glassPanel()
+                .padding(.horizontal, 14)
             }
-            .padding(.horizontal)
             .padding(.bottom)
+            .navigationTitle("Pick a date")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Done") { dismiss() }
+                        .cuteBody(weight: .demiBold)
                 }
             }
         }
@@ -547,11 +603,11 @@ struct QuickAddButton: View {
     var body: some View {
         Button(action: action) {
             Text(title)
-                .font(.system(.subheadline, design: .rounded))
-                .padding(.horizontal, 12)
+                .cuteCaption(weight: .demiBold)
+                .padding(.horizontal, 14)
                 .padding(.vertical, 8)
                 .background(
-                    Capsule().fill(DailyTheme.cream.opacity(0.9))
+                    Capsule().fill(DailyTheme.lilacMist.opacity(0.88))
                 )
                 .overlay(
                     Capsule().stroke(DailyTheme.stroke, lineWidth: 1)
@@ -570,6 +626,7 @@ struct AddBlockView: View {
     @State private var activity: String = ""
     @State private var startTimeOnly: Date = Date()
     @State private var durationMinutes: Int = 30
+    @State private var reminderLeadMinutes: Int = 10
     @State private var notes: String = ""
 
     let onSave: (ScheduleBlock) -> Void
@@ -577,20 +634,12 @@ struct AddBlockView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                LinearGradient(
-                    colors: [
-                        DailyTheme.skyBlue.opacity(0.35),
-                        DailyTheme.babyPink.opacity(0.25),
-                        Color.white
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-                .ignoresSafeArea()
+                PastelOrbBackground()
 
                 Form {
                     Section("Activity") {
                         TextField("e.g., Study, Work out, Dance", text: $activity)
+                            .cuteBody()
                     }
 
                     Section("Time") {
@@ -608,18 +657,29 @@ struct AddBlockView: View {
                         Stepper("\(durationMinutes) minutes", value: $durationMinutes, in: 5...600, step: 5)
                     }
 
+                    Section("Reminder") {
+                        Picker("Remind me", selection: $reminderLeadMinutes) {
+                            ForEach(ReminderLeadOptions.all, id: \.self) { minutes in
+                                Text(reminderLabel(for: minutes)).tag(minutes)
+                            }
+                        }
+                    }
+
                     Section("Notes") {
                         TextEditor(text: $notes)
                             .frame(minHeight: 180)
-                            .font(.system(.body, design: .rounded))
+                            .font(.custom("AvenirNext-Regular", size: 17))
                     }
                 }
                 .scrollContentBackground(.hidden)
+                .formStyle(.grouped)
             }
             .navigationTitle("New Block")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button("Cancel") { dismiss() }
+                        .cuteBody(weight: .demiBold)
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Save") {
@@ -634,11 +694,13 @@ struct AddBlockView: View {
                                 activity: trimmed,
                                 startTime: fullStart,
                                 durationMinutes: durationMinutes,
+                                reminderLeadMinutes: reminderLeadMinutes,
                                 notes: normalizedNotes
                             )
                         )
                         dismiss()
                     }
+                    .cuteBody(weight: .demiBold)
                     .disabled(activity.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }
@@ -655,6 +717,7 @@ struct EditBlockView: View {
     @State private var activity: String
     @State private var startTimeOnly: Date
     @State private var durationMinutes: Int
+    @State private var reminderLeadMinutes: Int
     @State private var notes: String
 
     private let original: ScheduleBlock
@@ -675,26 +738,19 @@ struct EditBlockView: View {
         _activity = State(initialValue: block.activity)
         _startTimeOnly = State(initialValue: block.startTime)
         _durationMinutes = State(initialValue: block.durationMinutes)
+        _reminderLeadMinutes = State(initialValue: block.reminderLeadMinutes)
         _notes = State(initialValue: block.notes)
     }
 
     var body: some View {
         NavigationStack {
             ZStack {
-                LinearGradient(
-                    colors: [
-                        DailyTheme.skyBlue.opacity(0.35),
-                        DailyTheme.babyPink.opacity(0.25),
-                        Color.white
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-                .ignoresSafeArea()
+                PastelOrbBackground()
 
                 Form {
                     Section("Activity") {
                         TextField("Activity", text: $activity)
+                            .cuteBody()
                     }
 
                     Section("Time") {
@@ -712,10 +768,18 @@ struct EditBlockView: View {
                         Stepper("\(durationMinutes) minutes", value: $durationMinutes, in: 5...600, step: 5)
                     }
 
+                    Section("Reminder") {
+                        Picker("Remind me", selection: $reminderLeadMinutes) {
+                            ForEach(ReminderLeadOptions.all, id: \.self) { minutes in
+                                Text(reminderLabel(for: minutes)).tag(minutes)
+                            }
+                        }
+                    }
+
                     Section("Notes") {
                         TextEditor(text: $notes)
                             .frame(minHeight: 180)
-                            .font(.system(.body, design: .rounded))
+                            .font(.custom("AvenirNext-Regular", size: 17))
                     }
 
                     Section {
@@ -728,11 +792,14 @@ struct EditBlockView: View {
                     }
                 }
                 .scrollContentBackground(.hidden)
+                .formStyle(.grouped)
             }
             .navigationTitle("Edit Block")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button("Cancel") { dismiss() }
+                        .cuteBody(weight: .demiBold)
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Save") {
@@ -748,12 +815,14 @@ struct EditBlockView: View {
                                 activity: trimmed,
                                 startTime: fullStart,
                                 durationMinutes: durationMinutes,
+                                reminderLeadMinutes: reminderLeadMinutes,
                                 notes: normalizedNotes,
                                 isDone: original.isDone
                             )
                         )
                         dismiss()
                     }
+                    .cuteBody(weight: .demiBold)
                     .disabled(activity.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }
@@ -771,7 +840,7 @@ struct GlassPanel: ViewModifier {
             .background(.ultraThinMaterial)
             .overlay(
                 RoundedRectangle(cornerRadius: 24, style: .continuous)
-                    .stroke(.white.opacity(0.35), lineWidth: 1)
+                    .stroke(.white.opacity(0.50), lineWidth: 1)
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 24, style: .continuous)
@@ -787,17 +856,87 @@ struct GlassPanel: ViewModifier {
     }
 }
 
+struct PastelOrbBackground: View {
+    var body: some View {
+        ZStack {
+            LinearGradient(
+                colors: [
+                    Color(red: 0.98, green: 0.97, blue: 1.00),
+                    Color(red: 1.00, green: 0.96, blue: 0.98),
+                    Color.white
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+
+            Circle()
+                .fill(DailyTheme.skyBlue.opacity(0.28))
+                .frame(width: 270, height: 270)
+                .offset(x: 130, y: -280)
+                .blur(radius: 12)
+
+            Circle()
+                .fill(DailyTheme.babyPink.opacity(0.30))
+                .frame(width: 230, height: 230)
+                .offset(x: -130, y: -180)
+                .blur(radius: 14)
+
+            Circle()
+                .fill(DailyTheme.babyPurple.opacity(0.26))
+                .frame(width: 260, height: 260)
+                .offset(x: -120, y: 330)
+                .blur(radius: 16)
+        }
+        .ignoresSafeArea()
+    }
+}
+
 extension View {
     func glassPanel() -> some View { modifier(GlassPanel()) }
+
+    func cuteHeadline() -> some View {
+        self
+            .font(.custom("Didot-Bold", size: 38))
+            .foregroundStyle(DailyTheme.roseText)
+    }
+
+    func cuteBody(weight: AvenirWeight = .regular) -> some View {
+        self
+            .font(.custom(weight.fontName, size: 17))
+            .foregroundStyle(DailyTheme.roseText)
+    }
+
+    func cuteCaption(weight: AvenirWeight = .medium) -> some View {
+        self
+            .font(.custom(weight.fontName, size: 14))
+            .foregroundStyle(DailyTheme.roseText.opacity(0.8))
+    }
+}
+
+enum AvenirWeight {
+    case regular
+    case medium
+    case demiBold
+
+    var fontName: String {
+        switch self {
+        case .regular:
+            return "AvenirNext-Regular"
+        case .medium:
+            return "AvenirNext-Medium"
+        case .demiBold:
+            return "AvenirNext-DemiBold"
+        }
+    }
 }
 
 // MARK: - Helpers / Storage
 
 private func greetingText() -> String {
     let hour = Calendar.current.component(.hour, from: Date())
-    if hour < 12 { return "Good Morning ☁️" }
-    if hour < 18 { return "Good Afternoon ☁️" }
-    return "Good Night ☁️"
+    if hour < 12 { return "Good Morning" }
+    if hour < 18 { return "Good Afternoon" }
+    return "Good Evening"
 }
 
 private func timeString(_ date: Date) -> String {
@@ -851,13 +990,18 @@ private enum ReminderCenter {
         let now = Date()
         let cal = Calendar.current
 
-        for block in blocks where !block.isDone && block.startTime > now {
+        for block in blocks where !block.isDone {
+            let reminderTime = cal.date(byAdding: .minute, value: -block.reminderLeadMinutes, to: block.startTime) ?? block.startTime
+            guard reminderTime > now else { continue }
+
             let content = UNMutableNotificationContent()
             content.title = block.activity
-            content.body = "Starts at \(timeString(block.startTime))"
+            content.body = block.reminderLeadMinutes == 0
+                ? "Starts now"
+                : "Starts at \(timeString(block.startTime))"
             content.sound = .default
 
-            let dateComponents = cal.dateComponents([.year, .month, .day, .hour, .minute], from: block.startTime)
+            let dateComponents = cal.dateComponents([.year, .month, .day, .hour, .minute], from: reminderTime)
             let trigger = UNCalendarNotificationTrigger(dateMatching: dateComponents, repeats: false)
             let request = UNNotificationRequest(
                 identifier: reminderID(for: block.id),
@@ -867,6 +1011,16 @@ private enum ReminderCenter {
             center.add(request) { _ in }
         }
     }
+}
+
+private enum ReminderLeadOptions {
+    static let all = [0, 5, 10, 15, 30, 60]
+}
+
+private func reminderLabel(for minutes: Int) -> String {
+    if minutes == 0 { return "At start time" }
+    if minutes == 1 { return "1 minute before" }
+    return "\(minutes) minutes before"
 }
 
 private enum Storage {
