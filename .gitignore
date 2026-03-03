@@ -1,2 +1,5 @@
 DerivedData/
 .DS_Store
+.context/
+DailyOS.xcodeproj/xcuserdata/
+DailyOS.xcodeproj/project.xcworkspace/xcuserdata/

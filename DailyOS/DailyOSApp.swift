@@ -1,48 +1,61 @@
-//
-//  DailyOSApp.swift
-//  DailyOS
-//
-//  Created by Stella Lee on 2/7/26.
-//
-
-import SwiftUI
 import SwiftData
+import SwiftUI
 
 @main
 struct DailyOSApp: App {
-    private var sharedModelContainer: ModelContainer = {
+    private let sharedModelContainer: ModelContainer
+    @StateObject private var viewModel: ScheduleViewModel
+
+    init() {
+        let tracer = PerformanceTracer.shared
+        let trace = tracer.begin(.cloudKitInit, message: "initialize-model-container")
+
+        let modelContainer = DailyOSApp.makeModelContainer(tracer: tracer)
+        tracer.end(trace, message: "model-container-ready")
+        sharedModelContainer = modelContainer
+
+        let repository = SwiftDataScheduleBlockRepository(modelContext: modelContainer.mainContext)
+        let reminderScheduler = UserNotificationReminderScheduler()
+        let migrationService = MigrationService(repository: repository, tracer: tracer)
+
+        _viewModel = StateObject(
+            wrappedValue: ScheduleViewModel(
+                repository: repository,
+                reminderScheduler: reminderScheduler,
+                migrationService: migrationService,
+                tracer: tracer
+            )
+        )
+    }
+
+    var body: some Scene {
+        WindowGroup {
+            ContentView(viewModel: viewModel)
+        }
+        .modelContainer(sharedModelContainer)
+    }
+
+    private static func makeModelContainer(tracer: PerformanceTracer) -> ModelContainer {
         let schema = Schema([
             ScheduleBlockEntity.self
         ])
 
         do {
-            let configuration = ModelConfiguration(
+            let cloudConfiguration = ModelConfiguration(
                 "DailyOS",
                 cloudKitDatabase: .automatic
             )
-            return try ModelContainer(for: schema, configurations: [configuration])
+            return try ModelContainer(for: schema, configurations: [cloudConfiguration])
         } catch {
-            // Fall back to a local store so the app still launches if CloudKit is unavailable.
-            let nsError = error as NSError
-            print("CloudKit container init failed: \(error)")
-            print("CloudKit NSError domain=\(nsError.domain) code=\(nsError.code) userInfo=\(nsError.userInfo)")
-            print("Falling back to local store.")
+            tracer.recordError(error, event: .cloudKitInit, message: "CloudKit init failed. Falling back to local store")
+
             do {
                 let fallbackConfiguration = ModelConfiguration("DailyOSLocalFallback")
                 return try ModelContainer(for: schema, configurations: [fallbackConfiguration])
             } catch {
-                let fallbackNSError = error as NSError
-                print("Fallback container init failed: \(error)")
-                print("Fallback NSError domain=\(fallbackNSError.domain) code=\(fallbackNSError.code) userInfo=\(fallbackNSError.userInfo)")
-                fatalError("Failed to initialize fallback model container: \(error)")
+                tracer.recordError(error, event: .cloudKitInit, message: "Fallback model container init failed")
+                fatalError("Failed to initialize model container: \(error)")
             }
         }
-    }()
-
-    var body: some Scene {
-        WindowGroup {
-            ContentView()
-        }
-        .modelContainer(sharedModelContainer)
     }
 }
