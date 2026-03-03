@@ -1,127 +1,13 @@
-import SwiftUI
 import SwiftData
-import UserNotifications
-
-// MARK: - Model
-
-struct ScheduleBlock: Identifiable, Equatable, Codable {
-    let id: UUID
-    var day: Date
-    var activity: String
-    var startTime: Date
-    var durationMinutes: Int
-    var notes: String
-    var isDone: Bool
-
-    init(
-        id: UUID = UUID(),
-        day: Date,
-        activity: String,
-        startTime: Date,
-        durationMinutes: Int,
-        notes: String = "",
-        isDone: Bool = false
-    ) {
-        self.id = id
-        self.day = Calendar.current.startOfDay(for: day)
-        self.activity = activity
-        self.startTime = startTime
-        self.durationMinutes = durationMinutes
-        self.notes = notes
-        self.isDone = isDone
-    }
-
-    enum CodingKeys: String, CodingKey {
-        case id, day, activity, startTime, durationMinutes, notes, isDone
-    }
-
-    init(from decoder: Decoder) throws {
-        let c = try decoder.container(keyedBy: CodingKeys.self)
-        id = try c.decode(UUID.self, forKey: .id)
-        day = try c.decode(Date.self, forKey: .day)
-        activity = try c.decode(String.self, forKey: .activity)
-        startTime = try c.decode(Date.self, forKey: .startTime)
-        durationMinutes = try c.decode(Int.self, forKey: .durationMinutes)
-        notes = (try? c.decode(String.self, forKey: .notes)) ?? ""
-        isDone = (try? c.decode(Bool.self, forKey: .isDone)) ?? false
-        day = Calendar.current.startOfDay(for: day)
-    }
-}
-
-@Model
-final class ScheduleBlockEntity {
-    var id: UUID = UUID()
-    var day: Date = Date()
-    var activity: String = ""
-    var startTime: Date = Date()
-    var durationMinutes: Int = 30
-    var notes: String = ""
-    var isDone: Bool = false
-    var updatedAt: Date = Date()
-
-    init(
-        id: UUID = UUID(),
-        day: Date,
-        activity: String,
-        startTime: Date,
-        durationMinutes: Int,
-        notes: String = "",
-        isDone: Bool = false,
-        updatedAt: Date = Date()
-    ) {
-        self.id = id
-        self.day = Calendar.current.startOfDay(for: day)
-        self.activity = activity
-        self.startTime = startTime
-        self.durationMinutes = durationMinutes
-        self.notes = notes
-        self.isDone = isDone
-        self.updatedAt = updatedAt
-    }
-
-    convenience init(from block: ScheduleBlock) {
-        self.init(
-            id: block.id,
-            day: block.day,
-            activity: block.activity,
-            startTime: block.startTime,
-            durationMinutes: block.durationMinutes,
-            notes: block.notes,
-            isDone: block.isDone,
-            updatedAt: Date()
-        )
-    }
-
-    func asDraft() -> ScheduleBlock {
-        ScheduleBlock(
-            id: id,
-            day: day,
-            activity: activity,
-            startTime: startTime,
-            durationMinutes: durationMinutes,
-            notes: notes,
-            isDone: isDone
-        )
-    }
-
-    func apply(from block: ScheduleBlock) {
-        day = Calendar.current.startOfDay(for: block.day)
-        activity = block.activity
-        startTime = block.startTime
-        durationMinutes = block.durationMinutes
-        notes = block.notes
-        isDone = block.isDone
-        updatedAt = Date()
-    }
-}
+import SwiftUI
 
 // MARK: - Theme
 
 enum DailyTheme {
     static let babyPink = Color(red: 1.00, green: 0.83, blue: 0.90)
-    static let skyBlue  = Color(red: 0.74, green: 0.90, blue: 1.00)
+    static let skyBlue = Color(red: 0.74, green: 0.90, blue: 1.00)
     static let lavender = Color(red: 0.86, green: 0.82, blue: 1.00)
-    static let cream    = Color(red: 0.99, green: 0.97, blue: 0.95)
+    static let cream = Color(red: 0.99, green: 0.97, blue: 0.95)
 
     static let stroke = skyBlue.opacity(0.35)
 }
@@ -129,45 +15,19 @@ enum DailyTheme {
 // MARK: - ContentView
 
 struct ContentView: View {
-    @Environment(\.modelContext) private var modelContext
-    @Query(
-        sort: [
-            SortDescriptor(\ScheduleBlockEntity.day, order: .forward),
-            SortDescriptor(\ScheduleBlockEntity.startTime, order: .forward)
-        ]
-    ) private var persistedBlocks: [ScheduleBlockEntity]
+    @ObservedObject var viewModel: ScheduleViewModel
 
-    @State private var didRunMigration = false
     @State private var showAdd = false
     @State private var editingBlock: ScheduleBlock?
     @State private var pendingDeleteBlock: ScheduleBlock?
-    @State private var selectedDate = Date()
     @State private var showCalendar = false
     @State private var swipeDirection = 0
 
-    private var selectedDayStart: Date {
-        Calendar.current.startOfDay(for: selectedDate)
-    }
-
-    private var todaysBlocks: [ScheduleBlock] {
-        persistedBlocks
-            .filter { $0.day == selectedDayStart }
-            .sorted { $0.startTime < $1.startTime }
-            .map { $0.asDraft() }
-    }
-    
-    private func insertNewBlockChronologically(_ newBlock: ScheduleBlock) {
-        var dayBlocks = persistedBlocks
-            .filter { $0.day == selectedDayStart }
-            .sorted { $0.startTime < $1.startTime }
-
-        let newEntity = ScheduleBlockEntity(from: newBlock)
-        modelContext.insert(newEntity)
-        dayBlocks.append(newEntity)
-        dayBlocks.sort { $0.startTime < $1.startTime }
-
-        let anchor = dayBlocks.map(\.startTime).min() ?? newEntity.startTime
-        recalculateTimesForSelectedDay(anchor: anchor, dayBlocks: dayBlocks)
+    private var selectedDateBinding: Binding<Date> {
+        Binding(
+            get: { viewModel.selectedDate },
+            set: { viewModel.selectDate($0) }
+        )
     }
 
     var body: some View {
@@ -177,13 +37,13 @@ struct ContentView: View {
                     .padding(.horizontal, 18)
                     .padding(.top, 6)
 
-                Text(shortDate(selectedDate))
+                Text(ScheduleFormatters.shortDateString(viewModel.selectedDate))
                     .font(.system(size: 34, weight: .bold, design: .rounded))
                     .padding(.horizontal, 26)
 
                 List {
                     Section {
-                        if todaysBlocks.isEmpty {
+                        if viewModel.dayBlocks.isEmpty {
                             VStack(alignment: .leading, spacing: 10) {
                                 emptyState
                                 Spacer()
@@ -195,7 +55,7 @@ struct ContentView: View {
                             .listRowSeparator(.hidden)
                             .listRowBackground(Color.clear)
                         } else {
-                            ForEach(todaysBlocks) { block in
+                            ForEach(viewModel.dayBlocks) { block in
                                 blockRow(block)
                                     .contentShape(Rectangle())
                                     .onTapGesture { editingBlock = block }
@@ -210,8 +70,6 @@ struct ContentView: View {
                                     .listRowSeparator(.hidden)
                                     .listRowBackground(Color.clear)
                             }
-                            // NOTE: List reordering only works in Edit mode.
-                            // Keeping the handler here so you can re-enable later if you want.
                             .onMove(perform: moveTodayBlocks)
                         }
                     }
@@ -230,40 +88,52 @@ struct ContentView: View {
                     endPoint: .bottom
                 )
             )
-            .id(selectedDayStart)
+            .id(viewModel.selectedDayStart)
             .transition(
                 .asymmetric(
                     insertion: .move(edge: swipeDirection == -1 ? .trailing : .leading).combined(with: .opacity),
                     removal: .move(edge: swipeDirection == -1 ? .leading : .trailing).combined(with: .opacity)
                 )
             )
-            .animation(.easeInOut(duration: 0.22), value: selectedDayStart)
+            .animation(.easeInOut(duration: 0.22), value: viewModel.selectedDayStart)
             .gesture(
                 DragGesture(minimumDistance: 20)
                     .onEnded { value in
                         if value.translation.width < -50 {
                             swipeDirection = -1
-                            goToNextDay()
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                viewModel.goToNextDay()
+                            }
                         } else if value.translation.width > 50 {
                             swipeDirection = 1
-                            goToPreviousDay()
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                viewModel.goToPreviousDay()
+                            }
                         }
                     }
             )
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    EditButton()
+                }
+
                 ToolbarItem(placement: .principal) {
                     Button {
                         withAnimation(.easeInOut(duration: 0.2)) {
-                            selectedDate = Date()
+                            viewModel.jumpToToday()
                         }
                     } label: {
-                        Text(Calendar.current.isDateInToday(selectedDate) ? "Today" : shortDate(selectedDate))
-                            .font(.system(.headline, design: .rounded))
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 6)
-                            .background(
-                                Capsule().fill(DailyTheme.babyPink.opacity(0.22))
-                            )
+                        Text(
+                            Calendar.current.isDateInToday(viewModel.selectedDate)
+                                ? "Today"
+                                : ScheduleFormatters.shortDateString(viewModel.selectedDate)
+                        )
+                        .font(.system(.headline, design: .rounded))
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(
+                            Capsule().fill(DailyTheme.babyPink.opacity(0.22))
+                        )
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("Jump to today")
@@ -292,29 +162,26 @@ struct ContentView: View {
                 }
             }
             .sheet(isPresented: $showAdd) {
-                AddBlockView(day: selectedDate) { newBlock in
-                    insertNewBlockChronologically(newBlock)
+                AddBlockView(day: viewModel.selectedDate) { newBlock in
+                    viewModel.add(newBlock)
                 }
             }
             .sheet(item: $editingBlock) { block in
                 EditBlockView(
-                    day: selectedDate,
+                    day: viewModel.selectedDate,
                     block: block,
                     onSave: { updated in
-                        if let entity = entity(for: updated.id) {
-                            entity.apply(from: updated)
-                            normalizeDaySchedule(for: updated.day)
-                        }
+                        viewModel.update(updated)
                         editingBlock = nil
                     },
                     onDelete: { toDelete in
-                        delete(toDelete)
+                        viewModel.delete(toDelete)
                         editingBlock = nil
                     }
                 )
             }
             .sheet(isPresented: $showCalendar) {
-                CalendarView(selectedDate: $selectedDate)
+                CalendarView(selectedDate: selectedDateBinding)
                     .presentationDetents([.medium, .large])
                     .presentationDragIndicator(.visible)
             }
@@ -328,7 +195,7 @@ struct ContentView: View {
             ) {
                 Button("Delete", role: .destructive) {
                     if let block = pendingDeleteBlock {
-                        delete(block)
+                        viewModel.delete(block)
                     }
                     pendingDeleteBlock = nil
                 }
@@ -340,13 +207,22 @@ struct ContentView: View {
                     Text("\"\(block.activity)\" will be permanently removed.")
                 }
             }
+            .alert(
+                "Operation failed",
+                isPresented: Binding(
+                    get: { viewModel.errorMessage != nil },
+                    set: { if !$0 { viewModel.errorMessage = nil } }
+                )
+            ) {
+                Button("OK", role: .cancel) {
+                    viewModel.errorMessage = nil
+                }
+            } message: {
+                Text(viewModel.errorMessage ?? "Unknown error")
+            }
         }
         .onAppear {
-            guard !didRunMigration else { return }
-            ReminderCenter.requestAuthorizationIfNeeded()
-            migrateLegacyBlocksIfNeeded()
-            ReminderCenter.sync(for: persistedBlocks.map { $0.asDraft() })
-            didRunMigration = true
+            viewModel.onAppear()
         }
     }
 
@@ -366,7 +242,7 @@ struct ContentView: View {
 
     private func blockRow(_ block: ScheduleBlock) -> some View {
         HStack(spacing: 12) {
-            Button { toggleDone(block) } label: {
+            Button { viewModel.toggleDone(block) } label: {
                 Image(systemName: block.isDone ? "checkmark.circle.fill" : "circle")
                     .font(.system(size: 20, weight: .semibold, design: .rounded))
                     .foregroundStyle(block.isDone ? DailyTheme.skyBlue : .secondary)
@@ -374,7 +250,7 @@ struct ContentView: View {
             .buttonStyle(.plain)
             .accessibilityLabel(block.isDone ? "Mark block as not done" : "Mark block as done")
 
-            Text(timeString(block.startTime))
+            Text(ScheduleFormatters.timeString(block.startTime))
                 .font(.system(.body, design: .monospaced))
                 .foregroundStyle(.secondary)
                 .frame(width: 70, alignment: .leading)
@@ -407,90 +283,13 @@ struct ContentView: View {
                 .stroke(DailyTheme.stroke, lineWidth: 1)
         )
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(block.activity), \(timeString(block.startTime)), \(block.durationMinutes) minutes")
+        .accessibilityLabel("\(block.activity), \(ScheduleFormatters.timeString(block.startTime)), \(block.durationMinutes) minutes")
         .accessibilityHint("Double tap to edit")
     }
 
-    // MARK: - Actions
-
-    private func delete(_ block: ScheduleBlock) {
-        guard let entity = entity(for: block.id) else { return }
-        modelContext.delete(entity)
-        ReminderCenter.remove(for: [block.id])
-    }
-
-    private func toggleDone(_ block: ScheduleBlock) {
-        if let entity = entity(for: block.id) {
-            entity.isDone.toggle()
-            entity.updatedAt = Date()
-            ReminderCenter.sync(for: [entity.asDraft()])
-        }
-    }
-
-    private func goToNextDay() {
-        withAnimation(.easeInOut(duration: 0.2)) {
-            selectedDate = Calendar.current.date(byAdding: .day, value: 1, to: selectedDate) ?? selectedDate
-        }
-    }
-
-    private func goToPreviousDay() {
-        withAnimation(.easeInOut(duration: 0.2)) {
-            selectedDate = Calendar.current.date(byAdding: .day, value: -1, to: selectedDate) ?? selectedDate
-        }
-    }
-
     private func moveTodayBlocks(from source: IndexSet, to destination: Int) {
-        var dayBlocks = persistedBlocks
-            .filter { $0.day == selectedDayStart }
-            .sorted { $0.startTime < $1.startTime }
-        guard !dayBlocks.isEmpty else { return }
-
-        let anchor = dayBlocks.map(\.startTime).min() ?? selectedDayStart
-        dayBlocks.move(fromOffsets: source, toOffset: destination)
-        recalculateTimesForSelectedDay(anchor: anchor, dayBlocks: dayBlocks)
+        viewModel.move(from: source, to: destination)
     }
-
-    private func recalculateTimesForSelectedDay(anchor: Date, dayBlocks: [ScheduleBlockEntity]) {
-        let cal = Calendar.current
-        var current = anchor
-
-        for block in dayBlocks {
-            block.startTime = current
-            block.updatedAt = Date()
-            current = cal.date(byAdding: .minute, value: block.durationMinutes, to: current) ?? current
-        }
-
-        ReminderCenter.sync(for: dayBlocks.map { $0.asDraft() })
-    }
-
-    private func normalizeDaySchedule(for day: Date) {
-        let dayStart = Calendar.current.startOfDay(for: day)
-        let dayBlocks = persistedBlocks
-            .filter { $0.day == dayStart }
-            .sorted { $0.startTime < $1.startTime }
-        guard !dayBlocks.isEmpty else { return }
-        let anchor = dayBlocks.map(\.startTime).min() ?? dayStart
-        recalculateTimesForSelectedDay(anchor: anchor, dayBlocks: dayBlocks)
-    }
-
-    private func entity(for id: UUID) -> ScheduleBlockEntity? {
-        persistedBlocks.first { $0.id == id }
-    }
-
-    private func migrateLegacyBlocksIfNeeded() {
-        let defaults = UserDefaults.standard
-        if defaults.bool(forKey: Storage.cloudMigrationCompleteKey) { return }
-
-        if persistedBlocks.isEmpty, let legacyBlocks = loadLegacyBlocks() {
-            for block in legacyBlocks {
-                modelContext.insert(ScheduleBlockEntity(from: block))
-            }
-        }
-
-        defaults.set(true, forKey: Storage.cloudMigrationCompleteKey)
-        defaults.removeObject(forKey: Storage.legacyBlocksKey)
-    }
-
 }
 
 // MARK: - GreetingBoxView
@@ -791,109 +590,18 @@ extension View {
     func glassPanel() -> some View { modifier(GlassPanel()) }
 }
 
-// MARK: - Helpers / Storage
-
-private func greetingText() -> String {
-    let hour = Calendar.current.component(.hour, from: Date())
-    if hour < 12 { return "Good Morning ☁️" }
-    if hour < 18 { return "Good Afternoon ☁️" }
-    return "Good Night ☁️"
-}
-
-private func timeString(_ date: Date) -> String {
-    Formatters.time.string(from: date)
-}
-
-private func shortDate(_ date: Date) -> String {
-    Formatters.shortDate.string(from: date)
-}
-
-private func combine(day: Date, time: Date) -> Date {
-    let cal = Calendar.current
-    let dayComps = cal.dateComponents([.year, .month, .day], from: day)
-    let timeComps = cal.dateComponents([.hour, .minute], from: time)
-
-    var comps = DateComponents()
-    comps.year = dayComps.year
-    comps.month = dayComps.month
-    comps.day = dayComps.day
-    comps.hour = timeComps.hour
-    comps.minute = timeComps.minute
-
-    return cal.date(from: comps) ?? day
-}
-
-private enum ReminderCenter {
-    private static let center = UNUserNotificationCenter.current()
-
-    private static func reminderID(for id: UUID) -> String {
-        "dailyos.schedule.\(id.uuidString)"
-    }
-
-    static func requestAuthorizationIfNeeded() {
-        center.getNotificationSettings { settings in
-            guard settings.authorizationStatus == .notDetermined else { return }
-            center.requestAuthorization(options: [.alert, .sound, .badge]) { _, _ in }
-        }
-    }
-
-    static func remove(for ids: [UUID]) {
-        let identifiers = ids.map(reminderID(for:))
-        center.removePendingNotificationRequests(withIdentifiers: identifiers)
-        center.removeDeliveredNotifications(withIdentifiers: identifiers)
-    }
-
-    static func sync(for blocks: [ScheduleBlock]) {
-        let identifiers = blocks.map { reminderID(for: $0.id) }
-        center.removePendingNotificationRequests(withIdentifiers: identifiers)
-        center.removeDeliveredNotifications(withIdentifiers: identifiers)
-
-        let now = Date()
-        let cal = Calendar.current
-
-        for block in blocks where !block.isDone && block.startTime > now {
-            let content = UNMutableNotificationContent()
-            content.title = block.activity
-            content.body = "Starts at \(timeString(block.startTime))"
-            content.sound = .default
-
-            let dateComponents = cal.dateComponents([.year, .month, .day, .hour, .minute], from: block.startTime)
-            let trigger = UNCalendarNotificationTrigger(dateMatching: dateComponents, repeats: false)
-            let request = UNNotificationRequest(
-                identifier: reminderID(for: block.id),
-                content: content,
-                trigger: trigger
-            )
-            center.add(request) { _ in }
-        }
-    }
-}
-
-private enum Storage {
-    static let legacyBlocksKey = "dailyos.blocks.v1"
-    static let cloudMigrationCompleteKey = "dailyos.cloudMigrationComplete.v1"
-}
-
-private enum Formatters {
-    static let time: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "h:mm a"
-        return formatter
-    }()
-
-    static let shortDate: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "MMM d"
-        return formatter
-    }()
-}
-
-private func loadLegacyBlocks() -> [ScheduleBlock]? {
-    guard let data = UserDefaults.standard.data(forKey: Storage.legacyBlocksKey) else { return nil }
-    return try? JSONDecoder().decode([ScheduleBlock].self, from: data)
-}
-
 #Preview {
-    ContentView()
-        .modelContainer(for: ScheduleBlockEntity.self, inMemory: true)
+    let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
+    let container = try! ModelContainer(for: ScheduleBlockEntity.self, configurations: configuration)
+    let repository = SwiftDataScheduleBlockRepository(modelContext: container.mainContext)
+    let migrationDefaults = UserDefaults(suiteName: "DailyOSPreview") ?? .standard
+    let migrationService = MigrationService(repository: repository, defaults: migrationDefaults)
+    let viewModel = ScheduleViewModel(
+        repository: repository,
+        reminderScheduler: PreviewReminderScheduler(),
+        migrationService: migrationService
+    )
+
+    return ContentView(viewModel: viewModel)
+        .modelContainer(container)
 }
