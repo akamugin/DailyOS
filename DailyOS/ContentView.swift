@@ -4,23 +4,30 @@ import SwiftUI
 // MARK: - Theme
 
 enum DailyTheme {
-    static let babyPink = Color(red: 1.00, green: 0.83, blue: 0.90)
-    static let skyBlue = Color(red: 0.74, green: 0.90, blue: 1.00)
-    static let lavender = Color(red: 0.86, green: 0.82, blue: 1.00)
-    static let cream = Color(red: 0.99, green: 0.97, blue: 0.95)
+    static let babyPink = Color(red: 0.99, green: 0.86, blue: 0.92)
+    static let skyBlue = Color(red: 0.82, green: 0.92, blue: 1.00)
+    static let babyPurple = Color(red: 0.88, green: 0.84, blue: 1.00)
+    static let pinkMist = Color(red: 0.99, green: 0.94, blue: 0.97)
+    static let lilacMist = Color(red: 0.95, green: 0.93, blue: 1.00)
+    static let cream = Color(red: 0.99, green: 0.98, blue: 0.97)
+    static let roseText = Color(red: 0.38, green: 0.29, blue: 0.34)
+    static let ribbon = Color(red: 0.91, green: 0.78, blue: 0.97)
 
-    static let stroke = skyBlue.opacity(0.35)
+    static let stroke = roseText.opacity(0.12)
 }
 
 // MARK: - ContentView
 
 struct ContentView: View {
     @ObservedObject var viewModel: ScheduleViewModel
+    @AppStorage(StorageKeys.hasCompletedOnboarding) private var hasCompletedOnboarding = false
+    @AppStorage(StorageKeys.onboardingPainPoint) private var onboardingPainPointRaw = OnboardingPainPoint.procrastination.rawValue
 
     @State private var showAdd = false
     @State private var editingBlock: ScheduleBlock?
     @State private var pendingDeleteBlock: ScheduleBlock?
     @State private var showCalendar = false
+    @State private var showOnboarding = false
     @State private var swipeDirection = 0
 
     private var selectedDateBinding: Binding<Date> {
@@ -30,16 +37,56 @@ struct ContentView: View {
         )
     }
 
+    private var onboardingPainPoint: OnboardingPainPoint {
+        OnboardingPainPoint(rawValue: onboardingPainPointRaw) ?? .procrastination
+    }
+
+    private var completedBlockCount: Int {
+        viewModel.dayBlocks.filter(\.isDone).count
+    }
+
+    private var completionSummary: String {
+        guard !viewModel.dayBlocks.isEmpty else { return "Starter day helps you begin faster" }
+        return "\(completedBlockCount)/\(viewModel.dayBlocks.count) complete today"
+    }
+
+    private var emptyStateMessage: String {
+        onboardingPainPoint.emptyStatePrompt
+    }
+
     var body: some View {
         NavigationStack {
-            VStack(alignment: .leading) {
+            VStack(alignment: .leading, spacing: 12) {
                 GreetingBoxView()
-                    .padding(.horizontal, 18)
+                    .padding(.horizontal, 20)
                     .padding(.top, 6)
 
-                Text(ScheduleFormatters.shortDateString(viewModel.selectedDate))
-                    .font(.system(size: 34, weight: .bold, design: .rounded))
-                    .padding(.horizontal, 26)
+                HStack(alignment: .firstTextBaseline) {
+                    Text(ScheduleFormatters.shortDateString(viewModel.selectedDate))
+                        .cuteHeadline()
+                    Spacer()
+                    HStack(spacing: 5) {
+                        Image(systemName: "sparkles")
+                            .font(.system(size: 12, weight: .semibold))
+                        Text("\(viewModel.dayBlocks.count) plans")
+                            .cuteCaption()
+                    }
+                    .foregroundStyle(DailyTheme.roseText.opacity(0.85))
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .background(Capsule().fill(DailyTheme.lilacMist.opacity(0.8)))
+                }
+                .padding(.horizontal, 24)
+
+                HStack {
+                    Text(completionSummary)
+                        .cuteCaption(weight: .demiBold)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 7)
+                        .background(Capsule().fill(DailyTheme.skyBlue.opacity(0.28)))
+                    Spacer()
+                }
+                .padding(.horizontal, 24)
 
                 List {
                     Section {
@@ -79,7 +126,12 @@ struct ContentView: View {
                     .listStyle(.plain)
                     .scrollContentBackground(.hidden)
                 }
+                .listStyle(.plain)
+                .scrollContentBackground(.hidden)
             }
+            .padding(.horizontal, 8)
+            .frame(maxWidth: 760, alignment: .topLeading)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             .background(
                 LinearGradient(
                     colors: [
@@ -131,11 +183,11 @@ struct ContentView: View {
                                 ? "Today"
                                 : ScheduleFormatters.shortDateString(viewModel.selectedDate)
                         )
-                        .font(.system(.headline, design: .rounded))
+                        .cuteBody()
                         .padding(.horizontal, 12)
                         .padding(.vertical, 6)
                         .background(
-                            Capsule().fill(DailyTheme.babyPink.opacity(0.22))
+                            Capsule().fill(DailyTheme.babyPurple.opacity(0.42))
                         )
                     }
                     .buttonStyle(.plain)
@@ -182,6 +234,17 @@ struct ContentView: View {
                     .presentationDetents([.medium, .large])
                     .presentationDragIndicator(.visible)
             }
+            .fullScreenCover(isPresented: $showOnboarding) {
+                OnboardingView { selectedPainPoint, shouldCreateStarterDay in
+                    onboardingPainPointRaw = selectedPainPoint.rawValue
+                    hasCompletedOnboarding = true
+                    if shouldCreateStarterDay {
+                        addStarterDayIfNeeded(for: viewModel.selectedDate, painPoint: selectedPainPoint)
+                    }
+                    showOnboarding = false
+                }
+                .interactiveDismissDisabled()
+            }
             .confirmationDialog(
                 "Delete this block?",
                 isPresented: Binding(
@@ -220,18 +283,27 @@ struct ContentView: View {
         }
         .onAppear {
             viewModel.onAppear()
+            showOnboarding = !hasCompletedOnboarding
         }
     }
 
     // MARK: - Subviews
 
     private var emptyState: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 12) {
             Text("Nothing planned yet")
                 .cuteBody(weight: .demiBold)
-            Text("Tap + to add something sweet to your day")
+            Text(emptyStateMessage)
                 .cuteCaption()
                 .foregroundStyle(.secondary)
+            Button {
+                addStarterDayIfNeeded(for: viewModel.selectedDate, painPoint: onboardingPainPoint)
+            } label: {
+                Label("Build starter day", systemImage: "wand.and.stars")
+                    .cuteCaption(weight: .demiBold)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(DailyTheme.babyPurple)
         }
         .padding(.vertical, 8)
         .padding(.horizontal, 8)
@@ -243,6 +315,7 @@ struct ContentView: View {
                 Image(systemName: block.isDone ? "checkmark.circle.fill" : "circle")
                     .font(.system(size: 22, weight: .semibold, design: .rounded))
                     .foregroundStyle(block.isDone ? DailyTheme.babyPurple : DailyTheme.roseText.opacity(0.5))
+                    .frame(width: 44, height: 44)
             }
             .buttonStyle(.plain)
             .accessibilityLabel(block.isDone ? "Mark block as not done" : "Mark block as done")
@@ -293,8 +366,184 @@ struct ContentView: View {
         .accessibilityHint("Double tap to edit")
     }
 
+    private func toolbarBubble(systemName: String, fill: Color) -> some View {
+        Image(systemName: systemName)
+            .font(.system(size: 16, weight: .semibold))
+            .foregroundStyle(DailyTheme.roseText)
+            .frame(minWidth: 44, minHeight: 44)
+            .background(
+                Circle().fill(fill.opacity(0.4))
+            )
+            .overlay(
+                Circle().stroke(Color.white.opacity(0.7), lineWidth: 1)
+            )
+            .overlay(alignment: .topTrailing) {
+                Image(systemName: "sparkles")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.white.opacity(0.9))
+                    .offset(x: 2, y: -2)
+            }
+    }
+
+    private func addStarterDayIfNeeded(for day: Date, painPoint: OnboardingPainPoint) {
+        viewModel.selectDate(day)
+        guard viewModel.dayBlocks.isEmpty else { return }
+
+        let starterBlocks = painPoint.starterTemplate.map { item in
+            ScheduleBlock(
+                day: day,
+                activity: item.activity,
+                startTime: date(for: day, hour: item.hour, minute: item.minute),
+                durationMinutes: item.durationMinutes,
+                reminderLeadMinutes: item.reminderLeadMinutes
+            )
+        }
+
+        for block in starterBlocks {
+            viewModel.add(block)
+        }
+    }
+
     private func moveTodayBlocks(from source: IndexSet, to destination: Int) {
         viewModel.move(from: source, to: destination)
+    }
+}
+
+// MARK: - Onboarding
+
+struct StarterTemplateItem {
+    let activity: String
+    let hour: Int
+    let minute: Int
+    let durationMinutes: Int
+    let reminderLeadMinutes: Int
+}
+
+enum OnboardingPainPoint: String, CaseIterable, Identifiable {
+    case procrastination
+    case overwhelmed
+    case distracted
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .procrastination: return "I procrastinate getting started"
+        case .overwhelmed: return "My day feels overloaded"
+        case .distracted: return "I lose focus after I start"
+        }
+    }
+
+    var subtitle: String {
+        switch self {
+        case .procrastination: return "Short warm-up blocks and quick wins."
+        case .overwhelmed: return "Fewer blocks with breathing room."
+        case .distracted: return "Deep work windows with reset breaks."
+        }
+    }
+
+    var emptyStatePrompt: String {
+        switch self {
+        case .procrastination: return "Start with a prebuilt day and beat the first-task friction."
+        case .overwhelmed: return "Use a lighter starter day so your plan feels realistic."
+        case .distracted: return "Use a focus-first starter day to reduce context switching."
+        }
+    }
+
+    var starterTemplate: [StarterTemplateItem] {
+        switch self {
+        case .procrastination:
+            return [
+                StarterTemplateItem(activity: "10-min setup sprint", hour: 9, minute: 0, durationMinutes: 10, reminderLeadMinutes: 5),
+                StarterTemplateItem(activity: "Priority task (part 1)", hour: 9, minute: 15, durationMinutes: 45, reminderLeadMinutes: 10),
+                StarterTemplateItem(activity: "Break + reset", hour: 10, minute: 5, durationMinutes: 15, reminderLeadMinutes: 5),
+                StarterTemplateItem(activity: "Priority task (part 2)", hour: 10, minute: 25, durationMinutes: 45, reminderLeadMinutes: 10)
+            ]
+        case .overwhelmed:
+            return [
+                StarterTemplateItem(activity: "Top 3 plan", hour: 9, minute: 0, durationMinutes: 20, reminderLeadMinutes: 5),
+                StarterTemplateItem(activity: "Most important task", hour: 9, minute: 30, durationMinutes: 60, reminderLeadMinutes: 10),
+                StarterTemplateItem(activity: "Admin / messages", hour: 11, minute: 0, durationMinutes: 30, reminderLeadMinutes: 10),
+                StarterTemplateItem(activity: "Buffer block", hour: 14, minute: 0, durationMinutes: 45, reminderLeadMinutes: 10)
+            ]
+        case .distracted:
+            return [
+                StarterTemplateItem(activity: "Focus block 1", hour: 9, minute: 0, durationMinutes: 50, reminderLeadMinutes: 10),
+                StarterTemplateItem(activity: "Short walk", hour: 9, minute: 55, durationMinutes: 10, reminderLeadMinutes: 5),
+                StarterTemplateItem(activity: "Focus block 2", hour: 10, minute: 10, durationMinutes: 50, reminderLeadMinutes: 10),
+                StarterTemplateItem(activity: "Review + next action", hour: 11, minute: 5, durationMinutes: 20, reminderLeadMinutes: 5)
+            ]
+        }
+    }
+}
+
+struct OnboardingView: View {
+    @State private var selectedPainPoint: OnboardingPainPoint = .procrastination
+
+    let onComplete: (OnboardingPainPoint, Bool) -> Void
+
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                PastelOrbBackground()
+
+                VStack(alignment: .leading, spacing: 18) {
+                    Text("Plan your day in 60 seconds")
+                        .cuteHeadline()
+
+                    Text("What gets in the way most often?")
+                        .cuteBody(weight: .demiBold)
+
+                    VStack(spacing: 12) {
+                        ForEach(OnboardingPainPoint.allCases) { painPoint in
+                            Button {
+                                selectedPainPoint = painPoint
+                            } label: {
+                                HStack(spacing: 10) {
+                                    Image(systemName: selectedPainPoint == painPoint ? "checkmark.circle.fill" : "circle")
+                                        .foregroundStyle(selectedPainPoint == painPoint ? DailyTheme.babyPurple : DailyTheme.roseText.opacity(0.5))
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text(painPoint.title)
+                                            .cuteBody(weight: .demiBold)
+                                        Text(painPoint.subtitle)
+                                            .cuteCaption()
+                                    }
+                                    Spacer()
+                                }
+                                .padding(14)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                        .fill(.white.opacity(0.72))
+                                )
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+
+                    Spacer()
+
+                    Button {
+                        onComplete(selectedPainPoint, true)
+                    } label: {
+                        Text("Create my starter day")
+                            .cuteBody(weight: .demiBold)
+                            .frame(maxWidth: .infinity, minHeight: 50)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(DailyTheme.babyPurple)
+
+                    Button("Skip for now") {
+                        onComplete(selectedPainPoint, false)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .cuteCaption()
+                }
+                .padding(24)
+                .frame(maxWidth: 760, maxHeight: .infinity, alignment: .topLeading)
+            }
+            .toolbar(.hidden, for: .navigationBar)
+        }
     }
 }
 
@@ -343,6 +592,7 @@ struct CalendarView: View {
                 .padding(12)
                 .glassPanel()
                 .padding(.horizontal, 14)
+                .frame(maxWidth: 560)
             }
             .padding(.bottom)
             .navigationTitle("Pick a date")
@@ -368,6 +618,7 @@ struct QuickAddButton: View {
                 .cuteCaption(weight: .demiBold)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 8)
+                .frame(minHeight: 44)
                 .background(
                     Capsule().fill(DailyTheme.lilacMist.opacity(0.88))
                 )
@@ -435,6 +686,8 @@ struct AddBlockView: View {
                 }
                 .scrollContentBackground(.hidden)
                 .formStyle(.grouped)
+                .frame(maxWidth: 760)
+                .frame(maxWidth: .infinity)
             }
             .navigationTitle("New Block")
             .navigationBarTitleDisplayMode(.inline)
@@ -555,6 +808,8 @@ struct EditBlockView: View {
                 }
                 .scrollContentBackground(.hidden)
                 .formStyle(.grouped)
+                .frame(maxWidth: 760)
+                .frame(maxWidth: .infinity)
             }
             .navigationTitle("Edit Block")
             .navigationBarTitleDisplayMode(.inline)
@@ -690,6 +945,30 @@ enum AvenirWeight {
             return "AvenirNext-DemiBold"
         }
     }
+}
+
+private enum ReminderLeadOptions {
+    static let all = [0, 5, 10, 15, 30, 60]
+}
+
+private func reminderLabel(for minutes: Int) -> String {
+    if minutes == 0 { return "At start time" }
+    if minutes == 1 { return "1 minute before" }
+    return "\(minutes) minutes before"
+}
+
+private func date(for day: Date, hour: Int, minute: Int) -> Date {
+    let cal = Calendar.current
+    let dayComps = cal.dateComponents([.year, .month, .day], from: day)
+
+    var comps = DateComponents()
+    comps.year = dayComps.year
+    comps.month = dayComps.month
+    comps.day = dayComps.day
+    comps.hour = hour
+    comps.minute = minute
+
+    return cal.date(from: comps) ?? day
 }
 
 #Preview {
