@@ -89,42 +89,7 @@ struct ContentView: View {
                 .padding(.horizontal, 24)
 
                 List {
-                    Section {
-                        if viewModel.dayBlocks.isEmpty {
-                            VStack(alignment: .leading, spacing: 10) {
-                                emptyState
-                                Spacer()
-                            }
-                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                            .glassPanel()
-                            .padding(.horizontal, 14)
-                            .padding(.top, 10)
-                            .listRowSeparator(.hidden)
-                            .listRowBackground(Color.clear)
-                        } else {
-                            ForEach(viewModel.dayBlocks) { block in
-                                blockRow(block)
-                                    .contentShape(Rectangle())
-                                    .onTapGesture { editingBlock = block }
-                                    .swipeActions(edge: .trailing) {
-                                        Button { editingBlock = block } label: {
-                                            Label("Edit", systemImage: "pencil")
-                                        }
-                                        Button(role: .destructive) { pendingDeleteBlock = block } label: {
-                                            Label("Delete", systemImage: "trash")
-                                        }
-                                        .listRowSeparator(.hidden)
-                                        .listRowBackground(Color.clear)
-                                }
-                                // NOTE: List reordering only works in Edit mode.
-                                // Keeping the handler here so you can re-enable later if you want.
-                                .onMove(perform: moveTodayBlocks)
-                            }
-                            .onMove(perform: moveTodayBlocks)
-                        }
-                    }
-                    .listStyle(.plain)
-                    .scrollContentBackground(.hidden)
+                    scheduleSection
                 }
                 .listStyle(.plain)
                 .scrollContentBackground(.hidden)
@@ -284,6 +249,46 @@ struct ContentView: View {
         .onAppear {
             viewModel.onAppear()
             showOnboarding = !hasCompletedOnboarding
+        }
+    }
+
+    @ViewBuilder
+    private var scheduleSection: some View {
+        Section {
+            if viewModel.dayBlocks.isEmpty {
+                VStack(alignment: .leading, spacing: 10) {
+                    emptyState
+                    Spacer()
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                .glassPanel()
+                .padding(.horizontal, 14)
+                .padding(.top, 10)
+                .listRowSeparator(.hidden)
+                .listRowBackground(Color.clear)
+            } else {
+                ForEach(viewModel.dayBlocks) { block in
+                    blockRow(block)
+                        .contentShape(Rectangle())
+                        .onTapGesture { editingBlock = block }
+                        .swipeActions(edge: .trailing) {
+                            Button {
+                                editingBlock = block
+                            } label: {
+                                Label("Edit", systemImage: "pencil")
+                            }
+
+                            Button(role: .destructive) {
+                                pendingDeleteBlock = block
+                            } label: {
+                                Label("Delete", systemImage: "trash")
+                            }
+                        }
+                        .listRowSeparator(.hidden)
+                        .listRowBackground(Color.clear)
+                }
+                .onMove(perform: moveTodayBlocks)
+            }
         }
     }
 
@@ -693,27 +698,32 @@ struct AddBlockView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button("Cancel") { dismiss() }
+                    Button(action: { dismiss() }) {
+                        Text("Cancel")
+                    }
                         .cuteBody(weight: .demiBold)
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("Save") {
+                    Button(action: {
                         let trimmed = activity.trimmingCharacters(in: .whitespacesAndNewlines)
-                        guard !trimmed.isEmpty else { return }
-                        let normalizedNotes = notes.trimmingCharacters(in: .whitespacesAndNewlines)
+                        if !trimmed.isEmpty {
+                            let normalizedNotes = notes.trimmingCharacters(in: .whitespacesAndNewlines)
+                            let fullStart = combine(day: day, time: startTimeOnly)
 
-                        let fullStart = combine(day: day, time: startTimeOnly)
-                        onSave(
-                            ScheduleBlock(
-                                day: day,
-                                activity: trimmed,
-                                startTime: fullStart,
-                                durationMinutes: durationMinutes,
-                                reminderLeadMinutes: reminderLeadMinutes,
-                                notes: normalizedNotes
+                            onSave(
+                                ScheduleBlock(
+                                    day: day,
+                                    activity: trimmed,
+                                    startTime: fullStart,
+                                    durationMinutes: durationMinutes,
+                                    reminderLeadMinutes: reminderLeadMinutes,
+                                    notes: normalizedNotes
+                                )
                             )
-                        )
-                        dismiss()
+                            dismiss()
+                        }
+                    }) {
+                        Text("Save")
                     }
                     .cuteBody(weight: .demiBold)
                     .disabled(activity.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
@@ -815,29 +825,34 @@ struct EditBlockView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button("Cancel") { dismiss() }
+                    Button(action: { dismiss() }) {
+                        Text("Cancel")
+                    }
                         .cuteBody(weight: .demiBold)
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("Save") {
+                    Button(action: {
                         let trimmed = activity.trimmingCharacters(in: .whitespacesAndNewlines)
-                        guard !trimmed.isEmpty else { return }
-                        let normalizedNotes = notes.trimmingCharacters(in: .whitespacesAndNewlines)
+                        if !trimmed.isEmpty {
+                            let normalizedNotes = notes.trimmingCharacters(in: .whitespacesAndNewlines)
+                            let fullStart = combine(day: day, time: startTimeOnly)
 
-                        let fullStart = combine(day: day, time: startTimeOnly)
-                        onSave(
-                            ScheduleBlock(
-                                id: original.id,
-                                day: day,
-                                activity: trimmed,
-                                startTime: fullStart,
-                                durationMinutes: durationMinutes,
-                                reminderLeadMinutes: reminderLeadMinutes,
-                                notes: normalizedNotes,
-                                isDone: original.isDone
+                            onSave(
+                                ScheduleBlock(
+                                    id: original.id,
+                                    day: day,
+                                    activity: trimmed,
+                                    startTime: fullStart,
+                                    durationMinutes: durationMinutes,
+                                    reminderLeadMinutes: reminderLeadMinutes,
+                                    notes: normalizedNotes,
+                                    isDone: original.isDone
+                                )
                             )
-                        )
-                        dismiss()
+                            dismiss()
+                        }
+                    }) {
+                        Text("Save")
                     }
                     .cuteBody(weight: .demiBold)
                     .disabled(activity.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)

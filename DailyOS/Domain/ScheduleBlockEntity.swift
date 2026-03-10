@@ -8,6 +8,7 @@ final class ScheduleBlockEntity {
     var activity: String = ""
     var startTime: Date = Date()
     var durationMinutes: Int = 30
+    var reminderLeadMinutes: Int = 10
     var notes: String = ""
     var isDone: Bool = false
     var updatedAt: Date = Date()
@@ -18,6 +19,7 @@ final class ScheduleBlockEntity {
         activity: String,
         startTime: Date,
         durationMinutes: Int,
+        reminderLeadMinutes: Int = 10,
         notes: String = "",
         isDone: Bool = false,
         updatedAt: Date = Date()
@@ -27,6 +29,7 @@ final class ScheduleBlockEntity {
         self.activity = activity
         self.startTime = startTime
         self.durationMinutes = durationMinutes
+        self.reminderLeadMinutes = reminderLeadMinutes
         self.notes = notes
         self.isDone = isDone
         self.updatedAt = updatedAt
@@ -39,6 +42,7 @@ final class ScheduleBlockEntity {
             activity: block.activity,
             startTime: block.startTime,
             durationMinutes: block.durationMinutes,
+            reminderLeadMinutes: block.reminderLeadMinutes,
             notes: block.notes,
             isDone: block.isDone,
             updatedAt: Date()
@@ -52,6 +56,7 @@ final class ScheduleBlockEntity {
             activity: activity,
             startTime: startTime,
             durationMinutes: durationMinutes,
+            reminderLeadMinutes: reminderLeadMinutes,
             notes: notes,
             isDone: isDone
         )
@@ -62,6 +67,7 @@ final class ScheduleBlockEntity {
         activity = block.activity
         startTime = block.startTime
         durationMinutes = block.durationMinutes
+        reminderLeadMinutes = block.reminderLeadMinutes
         notes = block.notes
         isDone = block.isDone
         updatedAt = Date()

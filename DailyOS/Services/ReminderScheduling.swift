@@ -17,6 +17,7 @@ actor UserNotificationReminderScheduler: ReminderScheduling {
     private struct ReminderFingerprint: Equatable {
         let activity: String
         let startTime: Date
+        let reminderLeadMinutes: Int
         let isDone: Bool
     }
 
@@ -102,9 +103,14 @@ actor UserNotificationReminderScheduler: ReminderScheduling {
         content.body = "Starts at \(ScheduleFormatters.timeString(block.startTime))"
         content.sound = .default
 
+        let reminderDate = Calendar.current.date(
+            byAdding: .minute,
+            value: -block.reminderLeadMinutes,
+            to: block.startTime
+        ) ?? block.startTime
         let dateComponents = Calendar.current.dateComponents(
             [.year, .month, .day, .hour, .minute],
-            from: block.startTime
+            from: reminderDate
         )
 
         let request = UNNotificationRequest(
@@ -146,6 +152,7 @@ actor UserNotificationReminderScheduler: ReminderScheduling {
         ReminderFingerprint(
             activity: block.activity,
             startTime: block.startTime,
+            reminderLeadMinutes: block.reminderLeadMinutes,
             isDone: block.isDone
         )
     }

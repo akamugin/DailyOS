@@ -6,6 +6,7 @@ struct ScheduleBlock: Identifiable, Equatable, Codable {
     var activity: String
     var startTime: Date
     var durationMinutes: Int
+    var reminderLeadMinutes: Int
     var notes: String
     var isDone: Bool
 
@@ -15,6 +16,7 @@ struct ScheduleBlock: Identifiable, Equatable, Codable {
         activity: String,
         startTime: Date,
         durationMinutes: Int,
+        reminderLeadMinutes: Int = 10,
         notes: String = "",
         isDone: Bool = false
     ) {
@@ -23,6 +25,7 @@ struct ScheduleBlock: Identifiable, Equatable, Codable {
         self.activity = activity
         self.startTime = startTime
         self.durationMinutes = durationMinutes
+        self.reminderLeadMinutes = reminderLeadMinutes
         self.notes = notes
         self.isDone = isDone
     }
@@ -33,6 +36,7 @@ struct ScheduleBlock: Identifiable, Equatable, Codable {
         case activity
         case startTime
         case durationMinutes
+        case reminderLeadMinutes
         case notes
         case isDone
     }
@@ -44,6 +48,7 @@ struct ScheduleBlock: Identifiable, Equatable, Codable {
         activity = try container.decode(String.self, forKey: .activity)
         startTime = try container.decode(Date.self, forKey: .startTime)
         durationMinutes = try container.decode(Int.self, forKey: .durationMinutes)
+        reminderLeadMinutes = (try? container.decode(Int.self, forKey: .reminderLeadMinutes)) ?? 10
         notes = (try? container.decode(String.self, forKey: .notes)) ?? ""
         isDone = (try? container.decode(Bool.self, forKey: .isDone)) ?? false
         day = Calendar.current.startOfDay(for: day)
