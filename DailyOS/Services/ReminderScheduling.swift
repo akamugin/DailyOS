@@ -17,6 +17,7 @@ actor UserNotificationReminderScheduler: ReminderScheduling {
     private struct ReminderFingerprint: Equatable {
         let activity: String
         let startTime: Date
+        let reminderLeadMinutes: Int
         let isDone: Bool
     }
 
@@ -71,7 +72,7 @@ actor UserNotificationReminderScheduler: ReminderScheduling {
 
         let now = Date()
         let desired = Dictionary(uniqueKeysWithValues: blocks.compactMap { block -> (UUID, ScheduleBlock)? in
-            guard !block.isDone, block.startTime > now else { return nil }
+            guard !block.isDone, reminderDate(for: block) > now else { return nil }
             return (block.id, block)
         })
 
@@ -104,7 +105,7 @@ actor UserNotificationReminderScheduler: ReminderScheduling {
 
         let dateComponents = Calendar.current.dateComponents(
             [.year, .month, .day, .hour, .minute],
-            from: block.startTime
+            from: reminderDate(for: block)
         )
 
         let request = UNNotificationRequest(
@@ -146,8 +147,17 @@ actor UserNotificationReminderScheduler: ReminderScheduling {
         ReminderFingerprint(
             activity: block.activity,
             startTime: block.startTime,
+            reminderLeadMinutes: block.reminderLeadMinutes,
             isDone: block.isDone
         )
+    }
+
+    private func reminderDate(for block: ScheduleBlock) -> Date {
+        Calendar.current.date(
+            byAdding: .minute,
+            value: -block.reminderLeadMinutes,
+            to: block.startTime
+        ) ?? block.startTime
     }
 
     private func authorizationStatus() async -> UNAuthorizationStatus {

@@ -2,9 +2,9 @@ import Foundation
 
 func greetingText(referenceDate: Date = Date()) -> String {
     let hour = Calendar.current.component(.hour, from: referenceDate)
-    if hour < 12 { return "Good Morning ☁️" }
-    if hour < 18 { return "Good Afternoon ☁️" }
-    return "Good Night ☁️"
+    if hour < 12 { return "Good Morning ♡" }
+    if hour < 18 { return "Good Afternoon ♡" }
+    return "Good Night ♡"
 }
 
 func combine(day: Date, time: Date) -> Date {

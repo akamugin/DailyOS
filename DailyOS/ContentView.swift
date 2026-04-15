@@ -4,31 +4,279 @@ import SwiftUI
 // MARK: - Theme
 
 enum DailyTheme {
-    static let babyPink = Color(red: 0.99, green: 0.86, blue: 0.92)
-    static let skyBlue = Color(red: 0.82, green: 0.92, blue: 1.00)
-    static let babyPurple = Color(red: 0.88, green: 0.84, blue: 1.00)
-    static let pinkMist = Color(red: 0.99, green: 0.94, blue: 0.97)
-    static let lilacMist = Color(red: 0.95, green: 0.93, blue: 1.00)
-    static let cream = Color(red: 0.99, green: 0.98, blue: 0.97)
-    static let roseText = Color(red: 0.38, green: 0.29, blue: 0.34)
-    static let ribbon = Color(red: 0.91, green: 0.78, blue: 0.97)
+    static func softSky(for tint: AppTint) -> Color {
+        tint.baseColor
+    }
 
-    static let stroke = roseText.opacity(0.12)
+    static func accent(for tint: AppTint) -> Color {
+        tint.strongColor
+    }
+
+    static func accentSoft(for tint: AppTint) -> Color {
+        tint.baseColor.opacity(0.9)
+    }
+
+    static let sky = Color(red: 0.94, green: 0.98, blue: 1.00)
+    static let mist = Color(red: 0.97, green: 0.99, blue: 1.00)
+    static let cloud = Color.white
+    static let cloudSoft = Color(red: 0.98, green: 0.99, blue: 1.00)
+
+    static let text = Color(red: 0.38, green: 0.49, blue: 0.60)
+    static let textSoft = Color(red: 0.55, green: 0.66, blue: 0.77)
+    static let sparkle = Color(red: 0.96, green: 0.99, blue: 1.00)
+
+    static func shadowColor(for tint: AppTint) -> Color {
+        tint.strongColor
+    }
+
+    static func stroke(for tint: AppTint) -> Color {
+        tint.strongColor.opacity(0.14)
+    }
+
+    static let softStroke = Color.white.opacity(0.92)
+}
+
+enum AppTint: String, CaseIterable, Identifiable {
+    case red
+    case orange
+    case yellow
+    case green
+    case blue
+    case purple
+    case pink
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        rawValue.capitalized
+    }
+
+    var baseColor: Color {
+        switch self {
+        case .red:
+            return Color(red: 1.00, green: 0.72, blue: 0.72)
+        case .orange:
+            return Color(red: 1.00, green: 0.82, blue: 0.66)
+        case .yellow:
+            return Color(red: 1.00, green: 0.92, blue: 0.62)
+        case .green:
+            return Color(red: 0.72, green: 0.90, blue: 0.74)
+        case .blue:
+            return Color(red: 0.74, green: 0.88, blue: 1.00)
+        case .purple:
+            return Color(red: 0.82, green: 0.74, blue: 1.00)
+        case .pink:
+            return Color(red: 1.00, green: 0.78, blue: 0.88)
+        }
+    }
+
+    var strongColor: Color {
+        switch self {
+        case .red:
+            return Color(red: 0.93, green: 0.45, blue: 0.45)
+        case .orange:
+            return Color(red: 0.95, green: 0.62, blue: 0.34)
+        case .yellow:
+            return Color(red: 0.90, green: 0.76, blue: 0.28)
+        case .green:
+            return Color(red: 0.42, green: 0.73, blue: 0.48)
+        case .blue:
+            return Color(red: 0.56, green: 0.77, blue: 1.00)
+        case .purple:
+            return Color(red: 0.67, green: 0.56, blue: 0.94)
+        case .pink:
+            return Color(red: 0.95, green: 0.55, blue: 0.73)
+        }
+    }
+}
+
+struct CandyButtonStyle: ButtonStyle {
+    var tint: AppTint = .blue
+
+    func makeBody(configuration: Configuration) -> some View {
+        let fill = LinearGradient(
+            colors: [
+                DailyTheme.cloud,
+                DailyTheme.mist,
+                DailyTheme.softSky(for: tint).opacity(0.55)
+            ],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+
+        let shadowColor = DailyTheme.shadowColor(for: tint).opacity(configuration.isPressed ? 0.05 : 0.14)
+        let shadowRadius: CGFloat = configuration.isPressed ? 4 : 12
+        let shadowY: CGFloat = configuration.isPressed ? 2 : 6
+        let scale: CGFloat = configuration.isPressed ? 0.97 : 1
+
+        return configuration.label
+            .foregroundStyle(DailyTheme.text)
+            .padding(.horizontal, 18)
+            .padding(.vertical, 11)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(fill)
+            )
+            .overlay(
+                Capsule(style: .continuous)
+                    .stroke(DailyTheme.softStroke, lineWidth: 1.2)
+            )
+            .overlay(
+                Capsule(style: .continuous)
+                    .stroke(DailyTheme.stroke(for: tint), lineWidth: 0.9)
+            )
+            .shadow(color: shadowColor, radius: shadowRadius, x: 0, y: shadowY)
+            .scaleEffect(scale)
+            .animation(.easeOut(duration: 0.16), value: configuration.isPressed)
+    }
+}
+
+struct SoftPillButtonStyle: ButtonStyle {
+    var tint: AppTint = .blue
+    var fill: Color = DailyTheme.cloud.opacity(0.96)
+
+    func makeBody(configuration: Configuration) -> some View {
+        let gradient = LinearGradient(
+            colors: [fill, DailyTheme.mist],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+
+        let borderColor = DailyTheme.accent(for: tint).opacity(0.12)
+        let shadowColor = DailyTheme.shadowColor(for: tint).opacity(configuration.isPressed ? 0.03 : 0.08)
+        let shadowRadius: CGFloat = configuration.isPressed ? 2 : 8
+        let shadowY: CGFloat = configuration.isPressed ? 1 : 4
+        let scale: CGFloat = configuration.isPressed ? 0.98 : 1
+
+        return configuration.label
+            .foregroundStyle(DailyTheme.text.opacity(0.95))
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(gradient)
+            )
+            .overlay(
+                Capsule(style: .continuous)
+                    .stroke(DailyTheme.softStroke, lineWidth: 1)
+            )
+            .overlay(
+                Capsule(style: .continuous)
+                    .stroke(borderColor, lineWidth: 0.8)
+            )
+            .shadow(color: shadowColor, radius: shadowRadius, x: 0, y: shadowY)
+            .scaleEffect(scale)
+            .animation(.easeOut(duration: 0.16), value: configuration.isPressed)
+    }
 }
 
 // MARK: - ContentView
 
 struct ContentView: View {
     @ObservedObject var viewModel: ScheduleViewModel
-    @AppStorage(StorageKeys.hasCompletedOnboarding) private var hasCompletedOnboarding = false
-    @AppStorage(StorageKeys.onboardingPainPoint) private var onboardingPainPointRaw = OnboardingPainPoint.procrastination.rawValue
+    @AppStorage private var hasCompletedOnboarding: Bool
+    @AppStorage private var onboardingPainPointRaw: String
+    @AppStorage("selectedAppTint") private var selectedAppTintRaw: String = AppTint.blue.rawValue
+
+    private let skipsBootstrapOnAppear: Bool
 
     @State private var showAdd = false
     @State private var editingBlock: ScheduleBlock?
     @State private var pendingDeleteBlock: ScheduleBlock?
     @State private var showCalendar = false
     @State private var showOnboarding = false
+    @State private var showThemePicker = false
     @State private var swipeDirection = 0
+    @State private var draggedBlock: ScheduleBlock?
+    @State private var dragOffset: CGSize = .zero
+
+    private var selectedAppTint: AppTint {
+        AppTint(rawValue: selectedAppTintRaw) ?? .blue
+    }
+
+    @MainActor
+    private static let previewDependencies = makePreviewDependencies()
+
+    init(
+        viewModel: ScheduleViewModel,
+        appStorage: UserDefaults? = nil,
+        skipsBootstrapOnAppear: Bool = false
+    ) {
+        self.viewModel = viewModel
+        self.skipsBootstrapOnAppear = skipsBootstrapOnAppear
+        _hasCompletedOnboarding = AppStorage(
+            wrappedValue: false,
+            StorageKeys.hasCompletedOnboarding,
+            store: appStorage
+        )
+        _onboardingPainPointRaw = AppStorage(
+            wrappedValue: OnboardingPainPoint.procrastination.rawValue,
+            StorageKeys.onboardingPainPoint,
+            store: appStorage
+        )
+    }
+
+    @MainActor
+    init() {
+        let preview = Self.previewDependencies
+
+        self.init(
+            viewModel: preview.viewModel,
+            appStorage: preview.defaults,
+            skipsBootstrapOnAppear: true
+        )
+    }
+
+    @MainActor
+    private static func makePreviewDependencies() -> PreviewDependencies {
+        let defaults = UserDefaults(suiteName: "DailyOSPreview") ?? .standard
+        defaults.set(true, forKey: StorageKeys.hasCompletedOnboarding)
+        defaults.set(OnboardingPainPoint.procrastination.rawValue, forKey: StorageKeys.onboardingPainPoint)
+        defaults.set(AppTint.blue.rawValue, forKey: "selectedAppTint")
+
+        let previewDay = Calendar.current.startOfDay(for: .now)
+        let repository = PreviewScheduleBlockRepository(blocks: [
+            ScheduleBlock(
+                day: previewDay,
+                sortOrder: 0,
+                activity: "Morning reset",
+                startTime: date(for: previewDay, hour: 9, minute: 0),
+                durationMinutes: 20,
+                reminderLeadMinutes: 5
+            ),
+            ScheduleBlock(
+                day: previewDay,
+                sortOrder: 1,
+                activity: "Deep work",
+                startTime: date(for: previewDay, hour: 10, minute: 0),
+                durationMinutes: 90,
+                reminderLeadMinutes: 10,
+                notes: "Ship the current feature branch"
+            ),
+            ScheduleBlock(
+                day: previewDay,
+                sortOrder: 2,
+                activity: "Lunch walk",
+                startTime: date(for: previewDay, hour: 12, minute: 30),
+                durationMinutes: 30,
+                reminderLeadMinutes: 0
+            )
+        ])
+        let migrationService = MigrationService(repository: repository, defaults: defaults)
+
+        let viewModel = ScheduleViewModel(
+            repository: repository,
+            reminderScheduler: PreviewReminderScheduler(),
+            migrationService: migrationService,
+            initialDate: previewDay
+        )
+        viewModel.selectDate(previewDay)
+
+        return PreviewDependencies(
+            defaults: defaults,
+            viewModel: viewModel
+        )
+    }
 
     private var selectedDateBinding: Binding<Date> {
         Binding(
@@ -56,235 +304,279 @@ struct ContentView: View {
 
     var body: some View {
         NavigationStack {
-            VStack(alignment: .leading, spacing: 12) {
-                GreetingBoxView()
-                    .padding(.horizontal, 20)
-                    .padding(.top, 6)
-
-                HStack(alignment: .firstTextBaseline) {
-                    Text(ScheduleFormatters.shortDateString(viewModel.selectedDate))
-                        .cuteHeadline()
-                    Spacer()
-                    HStack(spacing: 5) {
-                        Image(systemName: "sparkles")
-                            .font(.system(size: 12, weight: .semibold))
-                        Text("\(viewModel.dayBlocks.count) plans")
-                            .cuteCaption()
-                    }
-                    .foregroundStyle(DailyTheme.roseText.opacity(0.85))
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 5)
-                    .background(Capsule().fill(DailyTheme.lilacMist.opacity(0.8)))
-                }
-                .padding(.horizontal, 24)
-
-                HStack {
-                    Text(completionSummary)
-                        .cuteCaption(weight: .demiBold)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 7)
-                        .background(Capsule().fill(DailyTheme.skyBlue.opacity(0.28)))
-                    Spacer()
-                }
-                .padding(.horizontal, 24)
-
-                List {
-                    Section {
-                        if viewModel.dayBlocks.isEmpty {
-                            VStack(alignment: .leading, spacing: 10) {
-                                emptyState
-                                Spacer()
-                            }
-                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                            .glassPanel()
-                            .padding(.horizontal, 14)
-                            .padding(.top, 10)
-                            .listRowSeparator(.hidden)
-                            .listRowBackground(Color.clear)
-                        } else {
-                            ForEach(viewModel.dayBlocks) { block in
-                                blockRow(block)
-                                    .contentShape(Rectangle())
-                                    .onTapGesture { editingBlock = block }
-                                    .swipeActions(edge: .trailing) {
-                                        Button { editingBlock = block } label: {
-                                            Label("Edit", systemImage: "pencil")
-                                        }
-                                        Button(role: .destructive) { pendingDeleteBlock = block } label: {
-                                            Label("Delete", systemImage: "trash")
-                                        }
-                                        .listRowSeparator(.hidden)
-                                        .listRowBackground(Color.clear)
-                                }
-                                // NOTE: List reordering only works in Edit mode.
-                                // Keeping the handler here so you can re-enable later if you want.
-                                .onMove(perform: moveTodayBlocks)
-                            }
-                            .onMove(perform: moveTodayBlocks)
-                        }
-                    }
-                    .listStyle(.plain)
-                    .scrollContentBackground(.hidden)
-                }
-                .listStyle(.plain)
-                .scrollContentBackground(.hidden)
+            mainContent
+                .toolbar { mainToolbar }
+        }
+        .sheet(isPresented: $showAdd) {
+            AddBlockView(day: viewModel.selectedDate) { newBlock in
+                viewModel.add(newBlock)
             }
-            .padding(.horizontal, 8)
-            .frame(maxWidth: 760, alignment: .topLeading)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-            .background(
-                LinearGradient(
-                    colors: [
-                        DailyTheme.skyBlue.opacity(0.35),
-                        DailyTheme.babyPink.opacity(0.25),
-                        Color.white
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
+        }
+        .sheet(item: $editingBlock) { block in
+            EditBlockView(
+                day: viewModel.selectedDate,
+                block: block,
+                onSave: { updated in
+                    viewModel.update(updated)
+                    editingBlock = nil
+                },
+                onDelete: { toDelete in
+                    viewModel.delete(toDelete)
+                    editingBlock = nil
+                }
             )
-            .id(viewModel.selectedDayStart)
-            .transition(
-                .asymmetric(
-                    insertion: .move(edge: swipeDirection == -1 ? .trailing : .leading).combined(with: .opacity),
-                    removal: .move(edge: swipeDirection == -1 ? .leading : .trailing).combined(with: .opacity)
-                )
-            )
-            .animation(.easeInOut(duration: 0.22), value: viewModel.selectedDayStart)
-            .gesture(
-                DragGesture(minimumDistance: 20)
-                    .onEnded { value in
-                        if value.translation.width < -50 {
-                            swipeDirection = -1
-                            withAnimation(.easeInOut(duration: 0.2)) {
-                                viewModel.goToNextDay()
-                            }
-                        } else if value.translation.width > 50 {
-                            swipeDirection = 1
-                            withAnimation(.easeInOut(duration: 0.2)) {
-                                viewModel.goToPreviousDay()
-                            }
-                        }
-                    }
-            )
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    EditButton()
+        }
+        .sheet(isPresented: $showCalendar) {
+            CalendarView(selectedDate: selectedDateBinding)
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
+        }
+        .sheet(isPresented: $showThemePicker) {
+            ThemePickerView(selectedTintRaw: $selectedAppTintRaw)
+                .presentationDetents([.medium])
+                .presentationDragIndicator(.visible)
+        }
+        .fullScreenCover(isPresented: $showOnboarding) {
+            OnboardingView { selectedPainPoint, shouldCreateStarterDay in
+                onboardingPainPointRaw = selectedPainPoint.rawValue
+                hasCompletedOnboarding = true
+                if shouldCreateStarterDay {
+                    addStarterDayIfNeeded(for: viewModel.selectedDate, painPoint: selectedPainPoint)
                 }
-
-                ToolbarItem(placement: .principal) {
-                    Button {
-                        withAnimation(.easeInOut(duration: 0.2)) {
-                            viewModel.jumpToToday()
-                        }
-                    } label: {
-                        Text(
-                            Calendar.current.isDateInToday(viewModel.selectedDate)
-                                ? "Today"
-                                : ScheduleFormatters.shortDateString(viewModel.selectedDate)
-                        )
-                        .cuteBody()
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                        .background(
-                            Capsule().fill(DailyTheme.babyPurple.opacity(0.42))
-                        )
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Jump to today")
-                }
-
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button { showCalendar = true } label: {
-                        toolbarBubble(systemName: "calendar", fill: DailyTheme.skyBlue)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Open calendar")
-                }
-
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button { showAdd = true } label: {
-                        toolbarBubble(systemName: "plus", fill: DailyTheme.babyPink)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Add schedule block")
-                }
+                showOnboarding = false
             }
-            .sheet(isPresented: $showAdd) {
-                AddBlockView(day: viewModel.selectedDate) { newBlock in
-                    viewModel.add(newBlock)
-                }
-            }
-            .sheet(item: $editingBlock) { block in
-                EditBlockView(
-                    day: viewModel.selectedDate,
-                    block: block,
-                    onSave: { updated in
-                        viewModel.update(updated)
-                        editingBlock = nil
-                    },
-                    onDelete: { toDelete in
-                        viewModel.delete(toDelete)
-                        editingBlock = nil
-                    }
-                )
-            }
-            .sheet(isPresented: $showCalendar) {
-                CalendarView(selectedDate: selectedDateBinding)
-                    .presentationDetents([.medium, .large])
-                    .presentationDragIndicator(.visible)
-            }
-            .fullScreenCover(isPresented: $showOnboarding) {
-                OnboardingView { selectedPainPoint, shouldCreateStarterDay in
-                    onboardingPainPointRaw = selectedPainPoint.rawValue
-                    hasCompletedOnboarding = true
-                    if shouldCreateStarterDay {
-                        addStarterDayIfNeeded(for: viewModel.selectedDate, painPoint: selectedPainPoint)
-                    }
-                    showOnboarding = false
-                }
-                .interactiveDismissDisabled()
-            }
-            .confirmationDialog(
-                "Delete this block?",
-                isPresented: Binding(
-                    get: { pendingDeleteBlock != nil },
-                    set: { if !$0 { pendingDeleteBlock = nil } }
-                ),
-                titleVisibility: .visible
-            ) {
-                Button("Delete", role: .destructive) {
-                    if let block = pendingDeleteBlock {
-                        viewModel.delete(block)
-                    }
-                    pendingDeleteBlock = nil
-                }
-                Button("Cancel", role: .cancel) {
-                    pendingDeleteBlock = nil
-                }
-            } message: {
+            .interactiveDismissDisabled()
+        }
+        .confirmationDialog(
+            "Delete this block?",
+            isPresented: Binding(
+                get: { pendingDeleteBlock != nil },
+                set: { if !$0 { pendingDeleteBlock = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button("Delete", role: .destructive) {
                 if let block = pendingDeleteBlock {
-                    Text("\"\(block.activity)\" will be permanently removed.")
+                    viewModel.delete(block)
                 }
+                pendingDeleteBlock = nil
             }
-            .alert(
-                "Operation failed",
-                isPresented: Binding(
-                    get: { viewModel.errorMessage != nil },
-                    set: { if !$0 { viewModel.errorMessage = nil } }
-                )
-            ) {
-                Button("OK", role: .cancel) {
-                    viewModel.errorMessage = nil
-                }
-            } message: {
-                Text(viewModel.errorMessage ?? "Unknown error")
+            Button("Cancel", role: .cancel) {
+                pendingDeleteBlock = nil
             }
+        } message: {
+            if let block = pendingDeleteBlock {
+                Text("\"\(block.activity)\" will be permanently removed.")
+            }
+        }
+        .alert(
+            "Operation failed",
+            isPresented: Binding(
+                get: { viewModel.errorMessage != nil },
+                set: { if !$0 { viewModel.errorMessage = nil } }
+            )
+        ) {
+            Button("OK", role: .cancel) {
+                viewModel.errorMessage = nil
+            }
+        } message: {
+            Text(viewModel.errorMessage ?? "Unknown error")
         }
         .onAppear {
-            viewModel.onAppear()
+            if !skipsBootstrapOnAppear {
+                viewModel.onAppear()
+            }
             showOnboarding = !hasCompletedOnboarding
         }
+    }
+
+    @ToolbarContentBuilder
+    private var mainToolbar: some ToolbarContent {
+        ToolbarItem(placement: .principal) {
+            Button {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    viewModel.jumpToToday()
+                }
+            } label: {
+                Text(
+                    Calendar.current.isDateInToday(viewModel.selectedDate)
+                        ? "Today"
+                        : ScheduleFormatters.shortDateString(viewModel.selectedDate)
+                )
+                .cuteBody()
+            }
+            .buttonStyle(CandyButtonStyle(tint: selectedAppTint))
+            .accessibilityLabel("Jump to today")
+        }
+
+        ToolbarItem(placement: .topBarTrailing) {
+            Button { showThemePicker = true } label: {
+                toolbarBubble(
+                    systemName: "paintpalette",
+                    fill: DailyTheme.softSky(for: selectedAppTint)
+                )
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Choose theme color")
+        }
+
+        ToolbarItem(placement: .topBarTrailing) {
+            Button { showCalendar = true } label: {
+                toolbarBubble(
+                    systemName: "calendar",
+                    fill: DailyTheme.accent(for: selectedAppTint)
+                )
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Open calendar")
+        }
+
+        ToolbarItem(placement: .topBarTrailing) {
+            Button { showAdd = true } label: {
+                toolbarBubble(
+                    systemName: "plus",
+                    fill: DailyTheme.softSky(for: selectedAppTint)
+                )
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Add schedule block")
+        }
+    }
+
+    private var mainContent: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            GreetingBoxView()
+                .padding(.horizontal, 20)
+                .padding(.top, 0)
+
+            headerRow
+            completionRow
+            blocksList
+        }
+        .padding(.horizontal, 8)
+        .frame(maxWidth: 760, alignment: .topLeading)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .background(
+            LinearGradient(
+                colors: [
+                    DailyTheme.accent(for: selectedAppTint).opacity(0.35),
+                    DailyTheme.softSky(for: selectedAppTint).opacity(0.25),
+                    Color.white
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+        )
+        .id(viewModel.selectedDayStart)
+        .transition(
+            .asymmetric(
+                insertion: .move(edge: swipeDirection == -1 ? .trailing : .leading).combined(with: .opacity),
+                removal: .move(edge: swipeDirection == -1 ? .leading : .trailing).combined(with: .opacity)
+            )
+        )
+        .animation(.easeInOut(duration: 0.22), value: viewModel.selectedDayStart)
+        .gesture(daySwipeGesture)
+    }
+
+    private var headerRow: some View {
+        HStack(alignment: .top) {
+            Text(ScheduleFormatters.shortDateString(viewModel.selectedDate))
+                .cuteHeadline()
+                .lineLimit(1)
+                .minimumScaleFactor(0.85)
+
+            Spacer()
+
+            VStack(alignment: .trailing, spacing: 14) {
+                HStack(spacing: 6) {
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            viewModel.reorderByStartTime()
+                        }
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: "arrow.up.arrow.down")
+                                .font(.system(size: 11, weight: .semibold))
+                            Text("Sort")
+                                .cuteCaption()
+                                .lineLimit(1)
+                        }
+                    }
+                    .buttonStyle(SoftPillButtonStyle(tint: selectedAppTint))
+                    .accessibilityLabel("Sort blocks by time")
+
+                    HStack(spacing: 4) {
+                        Image(systemName: "sparkles")
+                            .font(.system(size: 11, weight: .semibold))
+                        Text("\(viewModel.dayBlocks.count) plans")
+                            .cuteCaption()
+                            .lineLimit(1)
+                    }
+                    .foregroundStyle(DailyTheme.text.opacity(0.85))
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 5)
+                    .background(Capsule().fill(DailyTheme.mist.opacity(0.8)))
+                }
+                .fixedSize(horizontal: true, vertical: false)
+
+                Text(completionSummary)
+                    .cuteCaption(weight: .demiBold)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 7)
+                    .background(
+                        Capsule().fill(
+                            DailyTheme.accent(for: selectedAppTint).opacity(0.28)
+                        )
+                    )
+            }
+        }
+        .padding(.horizontal, 24)
+    }
+
+    private var completionRow: some View {
+        EmptyView()
+    }
+
+    private var blocksList: some View {
+        ScrollView {
+            LazyVStack(spacing: 12) {
+                if viewModel.dayBlocks.isEmpty {
+                    VStack(alignment: .leading, spacing: 10) {
+                        emptyState
+                        Spacer()
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                    .glassPanel()
+                    .padding(.horizontal, 14)
+                    .padding(.top, 10)
+                } else {
+                    ForEach(viewModel.dayBlocks) { block in
+                        draggableBlockRow(block)
+                    }
+                }
+            }
+            .padding(.horizontal, 14)
+            .padding(.top, 10)
+            .padding(.bottom, 24)
+        }
+        .scrollIndicators(.hidden)
+    }
+
+    private var daySwipeGesture: some Gesture {
+        DragGesture(minimumDistance: 20)
+            .onEnded { value in
+                if value.translation.width < -50 {
+                    swipeDirection = -1
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        viewModel.goToNextDay()
+                    }
+                } else if value.translation.width > 50 {
+                    swipeDirection = 1
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        viewModel.goToPreviousDay()
+                    }
+                }
+            }
     }
 
     // MARK: - Subviews
@@ -293,17 +585,18 @@ struct ContentView: View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Nothing planned yet")
                 .cuteBody(weight: .demiBold)
+
             Text(emptyStateMessage)
                 .cuteCaption()
                 .foregroundStyle(.secondary)
+
             Button {
                 addStarterDayIfNeeded(for: viewModel.selectedDate, painPoint: onboardingPainPoint)
             } label: {
                 Label("Build starter day", systemImage: "wand.and.stars")
                     .cuteCaption(weight: .demiBold)
             }
-            .buttonStyle(.borderedProminent)
-            .tint(DailyTheme.babyPurple)
+            .buttonStyle(CandyButtonStyle(tint: selectedAppTint))
         }
         .padding(.vertical, 8)
         .padding(.horizontal, 8)
@@ -314,7 +607,11 @@ struct ContentView: View {
             Button { viewModel.toggleDone(block) } label: {
                 Image(systemName: block.isDone ? "checkmark.circle.fill" : "circle")
                     .font(.system(size: 22, weight: .semibold, design: .rounded))
-                    .foregroundStyle(block.isDone ? DailyTheme.babyPurple : DailyTheme.roseText.opacity(0.5))
+                    .foregroundStyle(
+                        block.isDone
+                            ? DailyTheme.accent(for: selectedAppTint)
+                            : DailyTheme.text.opacity(0.5)
+                    )
                     .frame(width: 44, height: 44)
             }
             .buttonStyle(.plain)
@@ -329,19 +626,19 @@ struct ContentView: View {
                 Text(block.activity)
                     .cuteBody(weight: .demiBold)
                     .strikethrough(block.isDone, color: .secondary)
-                    .foregroundStyle(block.isDone ? .secondary : DailyTheme.roseText)
+                    .foregroundStyle(block.isDone ? .secondary : DailyTheme.text)
 
                 Text("\(block.durationMinutes) min")
                     .cuteCaption()
                     .padding(.horizontal, 8)
                     .padding(.vertical, 3)
-                    .background(Capsule().fill(DailyTheme.pinkMist.opacity(0.9)))
+                    .background(Capsule().fill(DailyTheme.cloud.opacity(0.9)))
             }
 
             Spacer()
 
             Image(systemName: "pencil")
-                .foregroundStyle(DailyTheme.skyBlue.opacity(0.85))
+                .foregroundStyle(DailyTheme.accent(for: selectedAppTint).opacity(0.85))
                 .accessibilityHidden(true)
         }
         .padding(.vertical, 10)
@@ -352,15 +649,20 @@ struct ContentView: View {
         )
         .overlay(
             RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .stroke(DailyTheme.stroke, lineWidth: 1)
+                .stroke(DailyTheme.stroke(for: selectedAppTint), lineWidth: 1)
         )
         .overlay(alignment: .topTrailing) {
             Image(systemName: "heart.fill")
                 .font(.system(size: 9))
-                .foregroundStyle(DailyTheme.ribbon.opacity(0.8))
+                .foregroundStyle(DailyTheme.sparkle.opacity(0.8))
                 .padding(8)
         }
-        .shadow(color: DailyTheme.skyBlue.opacity(0.15), radius: 8, x: 0, y: 4)
+        .shadow(
+            color: DailyTheme.accent(for: selectedAppTint).opacity(0.15),
+            radius: 8,
+            x: 0,
+            y: 4
+        )
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(block.activity), \(ScheduleFormatters.timeString(block.startTime)), \(block.durationMinutes) minutes")
         .accessibilityHint("Double tap to edit")
@@ -369,20 +671,48 @@ struct ContentView: View {
     private func toolbarBubble(systemName: String, fill: Color) -> some View {
         Image(systemName: systemName)
             .font(.system(size: 16, weight: .semibold))
-            .foregroundStyle(DailyTheme.roseText)
-            .frame(minWidth: 44, minHeight: 44)
+            .foregroundStyle(DailyTheme.text)
+            .frame(minWidth: 38, minHeight: 38)
             .background(
-                Circle().fill(fill.opacity(0.4))
+                Circle().fill(
+                    LinearGradient(
+                        colors: [
+                            Color.white.opacity(0.98),
+                            fill.opacity(0.55)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
             )
             .overlay(
-                Circle().stroke(Color.white.opacity(0.7), lineWidth: 1)
+                Circle().stroke(Color.white.opacity(0.95), lineWidth: 1.1)
+            )
+            .overlay(
+                Circle().stroke(
+                    DailyTheme.accent(for: selectedAppTint).opacity(0.16),
+                    lineWidth: 0.8
+                )
             )
             .overlay(alignment: .topTrailing) {
-                Image(systemName: "sparkles")
-                    .font(.system(size: 10))
-                    .foregroundStyle(.white.opacity(0.9))
+                Circle()
+                    .fill(Color.white.opacity(0.92))
+                    .frame(width: 9, height: 9)
+                    .overlay(
+                        Image(systemName: "sparkles")
+                            .font(.system(size: 6, weight: .bold))
+                            .foregroundStyle(
+                                DailyTheme.accent(for: selectedAppTint).opacity(0.9)
+                            )
+                    )
                     .offset(x: 2, y: -2)
             }
+            .shadow(
+                color: DailyTheme.accent(for: selectedAppTint).opacity(0.14),
+                radius: 7,
+                x: 0,
+                y: 3
+            )
     }
 
     private func addStarterDayIfNeeded(for day: Date, painPoint: OnboardingPainPoint) {
@@ -404,9 +734,76 @@ struct ContentView: View {
         }
     }
 
-    private func moveTodayBlocks(from source: IndexSet, to destination: Int) {
-        viewModel.move(from: source, to: destination)
+    @ViewBuilder
+    private func draggableBlockRow(_ block: ScheduleBlock) -> some View {
+        let isDragged = draggedBlock?.id == block.id
+
+        blockRow(block)
+            .scaleEffect(isDragged ? 1.02 : 1.0)
+            .offset(y: isDragged ? dragOffset.height : 0)
+            .zIndex(isDragged ? 1 : 0)
+            .opacity(isDragged ? 0.95 : 1.0)
+            .animation(.easeInOut(duration: 0.15), value: isDragged)
+            .contentShape(Rectangle())
+            .onTapGesture {
+                if draggedBlock == nil {
+                    editingBlock = block
+                }
+            }
+            .contextMenu {
+                Button("Edit") {
+                    editingBlock = block
+                }
+
+                Button("Delete", role: .destructive) {
+                    pendingDeleteBlock = block
+                }
+            }
+            .gesture(
+                DragGesture(minimumDistance: 8)
+                    .onChanged { value in
+                        if draggedBlock == nil {
+                            draggedBlock = block
+                        }
+
+                        guard draggedBlock?.id == block.id else { return }
+                        dragOffset = value.translation
+                    }
+                    .onEnded { value in
+                        guard draggedBlock?.id == block.id else {
+                            draggedBlock = nil
+                            dragOffset = .zero
+                            return
+                        }
+
+                        finishDrag(for: block, translation: value.translation)
+
+                        withAnimation(.spring(response: 0.25, dampingFraction: 0.8)) {
+                            draggedBlock = nil
+                            dragOffset = .zero
+                        }
+                    }
+            )
     }
+    
+    private func finishDrag(for block: ScheduleBlock, translation: CGSize) {
+        guard let currentIndex = viewModel.dayBlocks.firstIndex(where: { $0.id == block.id }) else { return }
+
+        let rowHeight: CGFloat = 86
+        let offset = Int((translation.height / rowHeight).rounded())
+
+        let proposedIndex = currentIndex + offset
+        let newIndex = min(max(proposedIndex, 0), viewModel.dayBlocks.count - 1)
+
+        guard newIndex != currentIndex else { return }
+
+        let targetBlock = viewModel.dayBlocks[newIndex]
+
+        withAnimation(.easeInOut(duration: 0.18)) {
+            viewModel.swapStartTimesAndResort(first: block, second: targetBlock)
+        }
+    }
+    
 }
 
 // MARK: - Onboarding
@@ -478,14 +875,19 @@ enum OnboardingPainPoint: String, CaseIterable, Identifiable {
 }
 
 struct OnboardingView: View {
+    @AppStorage("selectedAppTint") private var selectedAppTintRaw: String = AppTint.blue.rawValue
     @State private var selectedPainPoint: OnboardingPainPoint = .procrastination
+
+    private var selectedAppTint: AppTint {
+        AppTint(rawValue: selectedAppTintRaw) ?? .blue
+    }
 
     let onComplete: (OnboardingPainPoint, Bool) -> Void
 
     var body: some View {
         NavigationStack {
             ZStack {
-                PastelOrbBackground()
+                PastelOrbBackground(tint: selectedAppTint)
 
                 VStack(alignment: .leading, spacing: 18) {
                     Text("Plan your day in 60 seconds")
@@ -501,13 +903,19 @@ struct OnboardingView: View {
                             } label: {
                                 HStack(spacing: 10) {
                                     Image(systemName: selectedPainPoint == painPoint ? "checkmark.circle.fill" : "circle")
-                                        .foregroundStyle(selectedPainPoint == painPoint ? DailyTheme.babyPurple : DailyTheme.roseText.opacity(0.5))
+                                        .foregroundStyle(
+                                            selectedPainPoint == painPoint
+                                                ? DailyTheme.accent(for: selectedAppTint)
+                                                : DailyTheme.text.opacity(0.5)
+                                        )
+
                                     VStack(alignment: .leading, spacing: 4) {
                                         Text(painPoint.title)
                                             .cuteBody(weight: .demiBold)
                                         Text(painPoint.subtitle)
                                             .cuteCaption()
                                     }
+
                                     Spacer()
                                 }
                                 .padding(14)
@@ -530,14 +938,14 @@ struct OnboardingView: View {
                             .cuteBody(weight: .demiBold)
                             .frame(maxWidth: .infinity, minHeight: 50)
                     }
-                    .buttonStyle(.borderedProminent)
-                    .tint(DailyTheme.babyPurple)
+                    .buttonStyle(CandyButtonStyle(tint: selectedAppTint))
 
                     Button("Skip for now") {
                         onComplete(selectedPainPoint, false)
                     }
                     .frame(maxWidth: .infinity)
                     .cuteCaption()
+                    .buttonStyle(SoftPillButtonStyle(tint: selectedAppTint))
                 }
                 .padding(24)
                 .frame(maxWidth: 760, maxHeight: .infinity, alignment: .topLeading)
@@ -550,6 +958,12 @@ struct OnboardingView: View {
 // MARK: - GreetingBoxView
 
 struct GreetingBoxView: View {
+    @AppStorage("selectedAppTint") private var selectedAppTintRaw: String = AppTint.blue.rawValue
+
+    private var selectedAppTint: AppTint {
+        AppTint(rawValue: selectedAppTintRaw) ?? .blue
+    }
+
     var body: some View {
         HStack {
             HStack(spacing: 7) {
@@ -558,15 +972,16 @@ struct GreetingBoxView: View {
                 Text(greetingText())
                     .cuteBody(weight: .demiBold)
             }
-            .foregroundStyle(DailyTheme.roseText)
-            .padding(.horizontal, 14)
-            .padding(.vertical, 8)
+            .foregroundStyle(DailyTheme.text)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
             .background(
-                Capsule().fill(DailyTheme.babyPink.opacity(0.38))
+                Capsule().fill(DailyTheme.softSky(for: selectedAppTint).opacity(0.38))
             )
             .overlay(
                 Capsule().stroke(Color.white.opacity(0.65), lineWidth: 1)
             )
+
             Spacer()
         }
     }
@@ -577,11 +992,17 @@ struct GreetingBoxView: View {
 struct CalendarView: View {
     @Environment(\.dismiss) private var dismiss
     @Binding var selectedDate: Date
+    @AppStorage("selectedAppTint") private var selectedAppTintRaw: String = AppTint.blue.rawValue
+
+    private var selectedAppTint: AppTint {
+        AppTint(rawValue: selectedAppTintRaw) ?? .blue
+    }
 
     var body: some View {
         NavigationStack {
             ZStack {
-                PastelOrbBackground()
+                PastelOrbBackground(tint: selectedAppTint)
+
                 DatePicker(
                     "",
                     selection: $selectedDate,
@@ -600,6 +1021,7 @@ struct CalendarView: View {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Done") { dismiss() }
                         .cuteBody(weight: .demiBold)
+                        .buttonStyle(SoftPillButtonStyle(tint: selectedAppTint))
                 }
             }
         }
@@ -612,21 +1034,19 @@ struct QuickAddButton: View {
     let title: String
     let action: () -> Void
 
+    @AppStorage("selectedAppTint") private var selectedAppTintRaw: String = AppTint.blue.rawValue
+
+    private var selectedAppTint: AppTint {
+        AppTint(rawValue: selectedAppTintRaw) ?? .blue
+    }
+
     var body: some View {
         Button(action: action) {
             Text(title)
                 .cuteCaption(weight: .demiBold)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 8)
                 .frame(minHeight: 44)
-                .background(
-                    Capsule().fill(DailyTheme.lilacMist.opacity(0.88))
-                )
-                .overlay(
-                    Capsule().stroke(DailyTheme.stroke, lineWidth: 1)
-                )
         }
-        .buttonStyle(.plain)
+        .buttonStyle(SoftPillButtonStyle(tint: selectedAppTint))
     }
 }
 
@@ -636,18 +1056,24 @@ struct AddBlockView: View {
     @Environment(\.dismiss) private var dismiss
     let day: Date
 
+    @AppStorage("selectedAppTint") private var selectedAppTintRaw: String = AppTint.blue.rawValue
+
     @State private var activity: String = ""
     @State private var startTimeOnly: Date = Date()
     @State private var durationMinutes: Int = 30
     @State private var reminderLeadMinutes: Int = 10
     @State private var notes: String = ""
 
+    private var selectedAppTint: AppTint {
+        AppTint(rawValue: selectedAppTintRaw) ?? .blue
+    }
+
     let onSave: (ScheduleBlock) -> Void
 
     var body: some View {
         NavigationStack {
             ZStack {
-                PastelOrbBackground()
+                PastelOrbBackground(tint: selectedAppTint)
 
                 Form {
                     Section("Activity") {
@@ -696,6 +1122,7 @@ struct AddBlockView: View {
                     Button("Cancel") { dismiss() }
                         .cuteBody(weight: .demiBold)
                 }
+
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Save") {
                         let trimmed = activity.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -729,11 +1156,17 @@ struct EditBlockView: View {
     @Environment(\.dismiss) private var dismiss
     let day: Date
 
+    @AppStorage("selectedAppTint") private var selectedAppTintRaw: String = AppTint.blue.rawValue
+
     @State private var activity: String
     @State private var startTimeOnly: Date
     @State private var durationMinutes: Int
     @State private var reminderLeadMinutes: Int
     @State private var notes: String
+
+    private var selectedAppTint: AppTint {
+        AppTint(rawValue: selectedAppTintRaw) ?? .blue
+    }
 
     private let original: ScheduleBlock
     let onSave: (ScheduleBlock) -> Void
@@ -760,7 +1193,7 @@ struct EditBlockView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                PastelOrbBackground()
+                PastelOrbBackground(tint: selectedAppTint)
 
                 Form {
                     Section("Activity") {
@@ -818,6 +1251,7 @@ struct EditBlockView: View {
                     Button("Cancel") { dismiss() }
                         .cuteBody(weight: .demiBold)
                 }
+
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Save") {
                         let trimmed = activity.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -829,6 +1263,7 @@ struct EditBlockView: View {
                             ScheduleBlock(
                                 id: original.id,
                                 day: day,
+                                sortOrder: original.sortOrder,
                                 activity: trimmed,
                                 startTime: fullStart,
                                 durationMinutes: durationMinutes,
@@ -841,6 +1276,76 @@ struct EditBlockView: View {
                     }
                     .cuteBody(weight: .demiBold)
                     .disabled(activity.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Theme Picker
+
+struct ThemePickerView: View {
+    @Environment(\.dismiss) private var dismiss
+    @Binding var selectedTintRaw: String
+
+    private var selectedTint: AppTint {
+        AppTint(rawValue: selectedTintRaw) ?? .blue
+    }
+
+    var body: some View {
+        NavigationStack {
+            VStack(alignment: .leading, spacing: 20) {
+                Text("Pick your color")
+                    .font(.system(size: 28, weight: .bold, design: .rounded))
+                    .foregroundStyle(DailyTheme.text)
+
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 70), spacing: 16)], spacing: 16) {
+                    ForEach(AppTint.allCases) { tint in
+                        Button {
+                            selectedTintRaw = tint.rawValue
+                        } label: {
+                            VStack(spacing: 8) {
+                                Circle()
+                                    .fill(tint.baseColor)
+                                    .frame(width: 52, height: 52)
+                                    .overlay(
+                                        Circle()
+                                            .stroke(Color.white.opacity(0.9), lineWidth: 2)
+                                    )
+                                    .overlay {
+                                        if selectedTint == tint {
+                                            Image(systemName: "checkmark")
+                                                .font(.system(size: 16, weight: .bold))
+                                                .foregroundStyle(.white)
+                                        }
+                                    }
+
+                                Text(tint.displayName)
+                                    .font(.system(size: 13, weight: .semibold, design: .rounded))
+                                    .foregroundStyle(DailyTheme.text)
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 8)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+
+                Spacer()
+            }
+            .padding(24)
+            .background(
+                LinearGradient(
+                    colors: [DailyTheme.sky, DailyTheme.mist, Color.white],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .ignoresSafeArea()
+            )
+            .navigationTitle("Theme")
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Done") { dismiss() }
                 }
             }
         }
@@ -874,12 +1379,14 @@ struct GlassPanel: ViewModifier {
 }
 
 struct PastelOrbBackground: View {
+    var tint: AppTint = .blue
+
     var body: some View {
         ZStack {
             LinearGradient(
                 colors: [
-                    Color(red: 0.98, green: 0.97, blue: 1.00),
-                    Color(red: 1.00, green: 0.96, blue: 0.98),
+                    DailyTheme.sky,
+                    DailyTheme.mist,
                     Color.white
                 ],
                 startPoint: .topLeading,
@@ -887,19 +1394,19 @@ struct PastelOrbBackground: View {
             )
 
             Circle()
-                .fill(DailyTheme.skyBlue.opacity(0.28))
+                .fill(DailyTheme.accent(for: tint).opacity(0.28))
                 .frame(width: 270, height: 270)
                 .offset(x: 130, y: -280)
                 .blur(radius: 12)
 
             Circle()
-                .fill(DailyTheme.babyPink.opacity(0.30))
+                .fill(DailyTheme.softSky(for: tint).opacity(0.30))
                 .frame(width: 230, height: 230)
                 .offset(x: -130, y: -180)
                 .blur(radius: 14)
 
             Circle()
-                .fill(DailyTheme.babyPurple.opacity(0.26))
+                .fill(DailyTheme.mist.opacity(0.26))
                 .frame(width: 260, height: 260)
                 .offset(x: -120, y: 330)
                 .blur(radius: 16)
@@ -914,19 +1421,19 @@ extension View {
     func cuteHeadline() -> some View {
         self
             .font(.custom("Didot-Bold", size: 38))
-            .foregroundStyle(DailyTheme.roseText)
+            .foregroundStyle(DailyTheme.text)
     }
 
     func cuteBody(weight: AvenirWeight = .regular) -> some View {
         self
             .font(.custom(weight.fontName, size: 17))
-            .foregroundStyle(DailyTheme.roseText)
+            .foregroundStyle(DailyTheme.text)
     }
 
     func cuteCaption(weight: AvenirWeight = .medium) -> some View {
         self
             .font(.custom(weight.fontName, size: 14))
-            .foregroundStyle(DailyTheme.roseText.opacity(0.8))
+            .foregroundStyle(DailyTheme.text.opacity(0.8))
     }
 }
 
@@ -971,18 +1478,60 @@ private func date(for day: Date, hour: Int, minute: Int) -> Date {
     return cal.date(from: comps) ?? day
 }
 
-#Preview {
-    let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
-    let container = try! ModelContainer(for: ScheduleBlockEntity.self, configurations: configuration)
-    let repository = SwiftDataScheduleBlockRepository(modelContext: container.mainContext)
-    let migrationDefaults = UserDefaults(suiteName: "DailyOSPreview") ?? .standard
-    let migrationService = MigrationService(repository: repository, defaults: migrationDefaults)
-    let viewModel = ScheduleViewModel(
-        repository: repository,
-        reminderScheduler: PreviewReminderScheduler(),
-        migrationService: migrationService
-    )
+private struct PreviewDependencies {
+    let defaults: UserDefaults
+    let viewModel: ScheduleViewModel
+}
 
-    return ContentView(viewModel: viewModel)
-        .modelContainer(container)
+@MainActor
+private final class PreviewScheduleBlockRepository: ScheduleBlockRepository {
+    private var blocks: [ScheduleBlock]
+
+    init(blocks: [ScheduleBlock]) {
+        self.blocks = blocks.sorted(by: previewBlockSort)
+    }
+
+    func fetchBlocks(for day: Date) throws -> [ScheduleBlock] {
+        let dayStart = Calendar.current.startOfDay(for: day)
+        return blocks
+            .filter { Calendar.current.isDate($0.day, inSameDayAs: dayStart) }
+            .sorted(by: previewBlockSort)
+    }
+
+    func fetchAllBlocks() throws -> [ScheduleBlock] {
+        blocks.sorted(by: previewBlockSort)
+    }
+
+    func upsert(block: ScheduleBlock) throws {
+        if let index = blocks.firstIndex(where: { $0.id == block.id }) {
+            blocks[index] = block
+        } else {
+            blocks.append(block)
+        }
+    }
+
+    func upsert(blocks newBlocks: [ScheduleBlock]) throws {
+        for block in newBlocks {
+            try upsert(block: block)
+        }
+    }
+
+    func delete(id: UUID) throws {
+        blocks.removeAll { $0.id == id }
+    }
+
+    func saveChanges() throws { }
+}
+
+private func previewBlockSort(_ lhs: ScheduleBlock, _ rhs: ScheduleBlock) -> Bool {
+    if !Calendar.current.isDate(lhs.day, inSameDayAs: rhs.day) {
+        return lhs.day < rhs.day
+    }
+    return lhs.sortOrder < rhs.sortOrder
+}
+
+// MARK: - Preview
+
+#Preview {
+    ContentView()
 }

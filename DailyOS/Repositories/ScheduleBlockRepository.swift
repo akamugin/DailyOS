@@ -27,7 +27,9 @@ final class SwiftDataScheduleBlockRepository: ScheduleBlockRepository {
             predicate: #Predicate { entity in
                 entity.day >= dayStart && entity.day < dayEnd
             },
-            sortBy: [SortDescriptor(\ScheduleBlockEntity.startTime, order: .forward)]
+            sortBy: [
+                SortDescriptor(\ScheduleBlockEntity.sortOrder, order: .forward)
+            ]
         )
 
         return try modelContext.fetch(descriptor).map { $0.asBlock() }
@@ -37,7 +39,7 @@ final class SwiftDataScheduleBlockRepository: ScheduleBlockRepository {
         let descriptor = FetchDescriptor<ScheduleBlockEntity>(
             sortBy: [
                 SortDescriptor(\ScheduleBlockEntity.day, order: .forward),
-                SortDescriptor(\ScheduleBlockEntity.startTime, order: .forward)
+                SortDescriptor(\ScheduleBlockEntity.sortOrder, order: .forward)
             ]
         )
 

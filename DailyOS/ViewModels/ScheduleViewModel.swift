@@ -72,22 +72,28 @@ final class ScheduleViewModel: ObservableObject {
     }
 
     func add(_ newBlock: ScheduleBlock) {
+        let dayStart = selectedDayStart
+
         do {
-            try tracer.measure(.addBlock, message: "day=\(selectedDayStart)") {
-                var blocks = try repository.fetchBlocks(for: selectedDayStart)
-                blocks.append(newBlock.withDay(selectedDayStart))
+            try tracer.measure(.addBlock, message: "day=\(dayStart)") {
+                var blocks = try repository.fetchBlocks(for: dayStart)
 
-                let anchor = blocks.map(\.startTime).min() ?? newBlock.startTime
-                let recalculated = recalculateTimes(for: blocks, anchor: anchor, dayStart: selectedDayStart)
+                let normalized = newBlock.withDay(dayStart)
+                blocks.append(normalized)
 
-                try repository.upsert(blocks: recalculated)
+                let reordered = blocks
+                    .sorted(by: blockStartTimeSort)
+                    .enumerated()
+                    .map { index, block in
+                        block.withSortOrder(index)
+                    }
+
+                try repository.upsert(blocks: reordered)
                 try repository.saveChanges()
-                dayBlocks = recalculated
+                dayBlocks = reordered
             }
 
-            Task {
-                await syncRemindersFromStore()
-            }
+            scheduleReminderSync()
         } catch {
             handle(error, event: .addBlock, message: "Failed to add block")
         }
@@ -98,52 +104,37 @@ final class ScheduleViewModel: ObservableObject {
 
         do {
             try tracer.measure(.editBlock, message: "id=\(updatedBlock.id.uuidString)") {
-                var blocks = try repository.fetchBlocks(for: dayStart)
-
-                if let index = blocks.firstIndex(where: { $0.id == updatedBlock.id }) {
-                    blocks[index] = updatedBlock.withDay(dayStart)
-                } else {
-                    blocks.append(updatedBlock.withDay(dayStart))
-                }
-
-                let anchor = blocks.map(\.startTime).min() ?? updatedBlock.startTime
-                let recalculated = recalculateTimes(for: blocks, anchor: anchor, dayStart: dayStart)
-
-                try repository.upsert(blocks: recalculated)
+                let normalized = updatedBlock.withDay(dayStart)
+                try repository.upsert(block: normalized)
                 try repository.saveChanges()
 
-                if calendar.isDate(dayStart, inSameDayAs: selectedDayStart) {
-                    dayBlocks = recalculated
+                if dayStart == selectedDayStart {
+                    try normalizeSelectedDayByStartTime()
                 } else {
-                    try loadDay(for: selectedDayStart)
+                    try reloadSelectedDay()
                 }
             }
 
-            Task {
-                await syncRemindersFromStore()
-            }
+            scheduleReminderSync()
         } catch {
             handle(error, event: .editBlock, message: "Failed to update block")
         }
     }
 
     func delete(_ block: ScheduleBlock) {
-        let dayStart = calendar.startOfDay(for: block.day)
-
         do {
             try tracer.measure(.deleteBlock, message: "id=\(block.id.uuidString)") {
                 try repository.delete(id: block.id)
                 try repository.saveChanges()
-                try normalizeDaySchedule(for: dayStart)
 
-                if calendar.isDate(dayStart, inSameDayAs: selectedDayStart) {
-                    try loadDay(for: selectedDayStart)
+                if calendar.isDate(block.day, inSameDayAs: selectedDayStart) {
+                    try normalizeSelectedDayKeepingCurrentOrder()
+                } else {
+                    try reloadSelectedDay()
                 }
             }
 
-            Task {
-                await syncRemindersFromStore()
-            }
+            scheduleReminderSync()
         } catch {
             handle(error, event: .deleteBlock, message: "Failed to delete block")
         }
@@ -161,9 +152,7 @@ final class ScheduleViewModel: ObservableObject {
                 }
             }
 
-            Task {
-                await syncRemindersFromStore()
-            }
+            scheduleReminderSync()
         } catch {
             handle(error, event: .toggleDone, message: "Failed to toggle block completion")
         }
@@ -172,23 +161,52 @@ final class ScheduleViewModel: ObservableObject {
     func move(from source: IndexSet, to destination: Int) {
         do {
             try tracer.measure(.reorder, message: "day=\(selectedDayStart)") {
-                var moved = dayBlocks
-                moved.move(fromOffsets: source, toOffset: destination)
-                guard !moved.isEmpty else { return }
+                var reordered = dayBlocks
+                reordered.move(fromOffsets: source, toOffset: destination)
+                reordered = reordered.enumerated().map { index, block in
+                    block.withSortOrder(index)
+                }
 
-                let anchor = moved.map(\.startTime).min() ?? selectedDayStart
-                let recalculated = recalculateTimes(for: moved, anchor: anchor, dayStart: selectedDayStart)
-
-                try repository.upsert(blocks: recalculated)
+                try repository.upsert(blocks: reordered)
                 try repository.saveChanges()
-                dayBlocks = recalculated
-            }
-
-            Task {
-                await syncRemindersFromStore()
+                dayBlocks = reordered
             }
         } catch {
             handle(error, event: .reorder, message: "Failed to reorder blocks")
+        }
+    }
+
+    func reorderByStartTime() {
+        do {
+            try tracer.measure(.reorder, message: "sort-by-start-time day=\(selectedDayStart)") {
+                try normalizeSelectedDayByStartTime()
+            }
+        } catch {
+            handle(error, event: .reorder, message: "Failed to reorder blocks by start time")
+        }
+    }
+
+    func swapStartTimesAndResort(first: ScheduleBlock, second: ScheduleBlock) {
+        guard first.id != second.id else { return }
+        guard calendar.isDate(first.day, inSameDayAs: second.day) else { return }
+
+        do {
+            try tracer.measure(.reorder, message: "swap-start-times day=\(selectedDayStart)") {
+                var updatedFirst = first
+                var updatedSecond = second
+
+                let firstTime = updatedFirst.startTime
+                updatedFirst.startTime = updatedSecond.startTime
+                updatedSecond.startTime = firstTime
+
+                try repository.upsert(block: updatedFirst)
+                try repository.upsert(block: updatedSecond)
+                try repository.saveChanges()
+
+                try normalizeSelectedDayByStartTime()
+            }
+        } catch {
+            handle(error, event: .reorder, message: "Failed to swap block times")
         }
     }
 
@@ -216,31 +234,39 @@ final class ScheduleViewModel: ObservableObject {
         }
     }
 
-    private func normalizeDaySchedule(for day: Date) throws {
-        let dayStart = calendar.startOfDay(for: day)
-        let blocks = try repository.fetchBlocks(for: dayStart)
-
-        guard !blocks.isEmpty else { return }
-
-        let anchor = blocks.map(\.startTime).min() ?? dayStart
-        let recalculated = recalculateTimes(for: blocks, anchor: anchor, dayStart: dayStart)
-
-        try repository.upsert(blocks: recalculated)
-        try repository.saveChanges()
+    private func reloadSelectedDay() throws {
+        try loadDay(for: selectedDayStart)
     }
 
-    private func recalculateTimes(for blocks: [ScheduleBlock], anchor: Date, dayStart: Date) -> [ScheduleBlock] {
-        let ordered = blocks.sorted { $0.startTime < $1.startTime }
-        var cursor = anchor
-
-        return ordered.map { block in
-            defer {
-                cursor = calendar.date(byAdding: .minute, value: block.durationMinutes, to: cursor) ?? cursor
+    private func normalizeSelectedDayByStartTime() throws {
+        let normalized = try repository.fetchBlocks(for: selectedDayStart)
+            .sorted(by: blockStartTimeSort)
+            .enumerated()
+            .map { index, block in
+                block.withSortOrder(index)
             }
 
-            return block
-                .withDay(dayStart)
-                .withStartTime(cursor)
+        try repository.upsert(blocks: normalized)
+        try repository.saveChanges()
+        dayBlocks = normalized
+    }
+
+    private func normalizeSelectedDayKeepingCurrentOrder() throws {
+        let normalized = try repository.fetchBlocks(for: selectedDayStart)
+            .sorted(by: blockSortOrderSort)
+            .enumerated()
+            .map { index, block in
+                block.withSortOrder(index)
+            }
+
+        try repository.upsert(blocks: normalized)
+        try repository.saveChanges()
+        dayBlocks = normalized
+    }
+
+    private func scheduleReminderSync() {
+        Task {
+            await syncRemindersFromStore()
         }
     }
 
@@ -256,5 +282,16 @@ final class ScheduleViewModel: ObservableObject {
     private func handle(_ error: Error, event: PerformanceTracer.Event, message: String) {
         tracer.recordError(error, event: event, message: message)
         errorMessage = message
+    }
+
+    private func blockStartTimeSort(_ lhs: ScheduleBlock, _ rhs: ScheduleBlock) -> Bool {
+        if lhs.startTime != rhs.startTime {
+            return lhs.startTime < rhs.startTime
+        }
+        return lhs.sortOrder < rhs.sortOrder
+    }
+
+    private func blockSortOrderSort(_ lhs: ScheduleBlock, _ rhs: ScheduleBlock) -> Bool {
+        lhs.sortOrder < rhs.sortOrder
     }
 }
