@@ -479,18 +479,17 @@ struct ContentView: View {
     }
 
     private var headerRow: some View {
-        HStack(alignment: .top) {
+        HStack {
             Text(ScheduleFormatters.shortDateString(viewModel.selectedDate))
                 .cuteHeadline()
                 .lineLimit(1)
                 .minimumScaleFactor(0.85)
 
             Spacer()
-            
         }
         .padding(.horizontal, 24)
     }
-
+    
     private var completionRow: some View {
         HStack {
             Spacer()
