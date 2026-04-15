@@ -295,7 +295,7 @@ struct ContentView: View {
 
     private var completionSummary: String {
         guard !viewModel.dayBlocks.isEmpty else { return "Starter day helps you begin faster" }
-        return "\(completedBlockCount)/\(viewModel.dayBlocks.count) complete today"
+        return "\(completedBlockCount)/\(viewModel.dayBlocks.count) done"
     }
 
     private var emptyStateMessage: String {
@@ -486,55 +486,28 @@ struct ContentView: View {
                 .minimumScaleFactor(0.85)
 
             Spacer()
-
-            VStack(alignment: .trailing, spacing: 14) {
-                HStack(spacing: 6) {
-                    Button {
-                        withAnimation(.easeInOut(duration: 0.2)) {
-                            viewModel.reorderByStartTime()
-                        }
-                    } label: {
-                        HStack(spacing: 4) {
-                            Image(systemName: "arrow.up.arrow.down")
-                                .font(.system(size: 11, weight: .semibold))
-                            Text("Sort")
-                                .cuteCaption()
-                                .lineLimit(1)
-                        }
-                    }
-                    .buttonStyle(SoftPillButtonStyle(tint: selectedAppTint))
-                    .accessibilityLabel("Sort blocks by time")
-
-                    HStack(spacing: 4) {
-                        Image(systemName: "sparkles")
-                            .font(.system(size: 11, weight: .semibold))
-                        Text("\(viewModel.dayBlocks.count) plans")
-                            .cuteCaption()
-                            .lineLimit(1)
-                    }
-                    .foregroundStyle(DailyTheme.text.opacity(0.85))
-                    .padding(.horizontal, 9)
-                    .padding(.vertical, 5)
-                    .background(Capsule().fill(DailyTheme.mist.opacity(0.8)))
-                }
-                .fixedSize(horizontal: true, vertical: false)
-
-                Text(completionSummary)
-                    .cuteCaption(weight: .demiBold)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 7)
-                    .background(
-                        Capsule().fill(
-                            DailyTheme.accent(for: selectedAppTint).opacity(0.28)
-                        )
-                    )
-            }
+            
         }
         .padding(.horizontal, 24)
     }
 
     private var completionRow: some View {
-        EmptyView()
+        HStack {
+            Spacer()
+
+            HStack(spacing: 4) {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.system(size: 11, weight: .semibold))
+                Text(completionSummary)
+                    .cuteCaption()
+                    .lineLimit(1)
+            }
+            .foregroundStyle(DailyTheme.text.opacity(0.85))
+            .padding(.horizontal, 9)
+            .padding(.vertical, 5)
+            .background(Capsule().fill(DailyTheme.mist.opacity(0.8)))
+        }
+        .padding(.horizontal, 24)
     }
 
     private var blocksList: some View {
